@@ -27,16 +27,7 @@
     const d = document.createElement('div');
     d.className = 'card' + (o.cls ? ' ' + o.cls : '');
     if (!card) { d.classList.add('back'); return d; }
-    const img = document.createElement('img');
-    img.alt = card.name; img.loading = 'lazy';
-    img.src = imgBase + (card.img || card.id + '.png');
-    img.onerror = () => {
-      img.remove();
-      const f = document.createElement('div'); f.className = 'fallback';
-      f.innerHTML = `<b>${card.cost != null ? 'Cost ' + card.cost : TYPE_TH[card.type]}</b><span>${esc(card.name)}</span><b>${card.power != null ? 'P ' + card.power : ''}</b>`;
-      d.appendChild(f);
-    };
-    d.appendChild(img);
+    d.appendChild(artEl(card));
     if (o.power != null) {
       const pw = document.createElement('div');
       pw.className = 'pw' + (o.power > (card.power || 0) ? ' up' : o.power < (card.power || 0) ? ' down' : '');
@@ -46,6 +37,36 @@
     if (o.eq) { const e = document.createElement('div'); e.className = 'eq'; e.textContent = '+' + o.eq; e.title = 'มีการ์ดสวมใส่'; d.appendChild(e); }
     if (o.onclick) d.addEventListener('click', ev => { ev.stopPropagation(); o.onclick(); });
     return d;
+  }
+  // Card art: sprite sheets in the web build (TC_ATLAS), else the image file in refs/, else a drawn text card
+  function artEl(card, cls) {
+    const A = window.TC_ATLAS, at = A && A.map[card.id];
+    if (at) {
+      const d = document.createElement('div');
+      d.className = 'art' + (cls ? ' ' + cls : '');
+      d.style.backgroundImage = `url("${A.sheets[at[0]]}")`;
+      d.style.backgroundSize = `${A.cols * 100}% ${A.rows * 100}%`;
+      d.style.backgroundPosition = `${at[1] * 100 / (A.cols - 1)}% ${at[2] * 100 / (A.rows - 1)}%`;
+      d.setAttribute('role', 'img'); d.setAttribute('aria-label', card.name);
+      return d;
+    }
+    if (card.img) {
+      const img = document.createElement('img');
+      if (cls) img.className = cls;
+      img.alt = card.name; img.loading = 'lazy';
+      img.src = imgBase + card.img;
+      img.onerror = () => img.replaceWith(textCard(card, cls));
+      return img;
+    }
+    return textCard(card, cls);
+  }
+  function textCard(card, cls) {
+    const f = document.createElement('div');
+    f.className = 'fallback c-' + (card.color || 'none') + (cls ? ' ' + cls : '');
+    const top = card.type === 'magic' ? (card.magicType ? card.magicType[0].toUpperCase() + card.magicType.slice(1) + ' ' : '') + 'Magic' : card.cost != null ? 'Cost ' + card.cost : TYPE_TH[card.type] || card.type;
+    const gem = (card.gems || []).reduce((s, g) => s + g.count, 0);
+    f.innerHTML = `<b>${esc(top)}</b><span class="fn">${esc(card.name)}</span>${card.symbol ? `<span class="fs">${esc(card.symbol)}</span>` : ''}<b>${card.power != null ? 'POWER ' + card.power : ''}${gem ? ` · GEM ${gem}` : ''}</b>`;
+    return f;
   }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -323,10 +344,11 @@
       c.color ? 'สี' + (COLOR_TH[c.color] || c.color) : null, c.symbol ? 'Symbol ' + c.symbol : null, c.power != null ? 'POWER ' + c.power : null, c.onlyOne ? 'Only #1' : null].filter(Boolean).join(' · ');
     const fx = FX(c.id);
     const impl = !c.text || (fx && Object.keys(fx).length) || /^(โล่มนุษย์|เตะไข่|ลูกฮึด|สามัคคี|แทงหลัง)/.test(c.text);
-    box.innerHTML = `<img src="${imgBase + (c.img || c.id + '.png')}" alt="" onerror="this.remove()"><div class="dname">${esc(c.name)}</div><div class="dmeta">${esc(meta)} · ${c.id}</div>
+    box.innerHTML = `<div class="artslot"></div><div class="dname">${esc(c.name)}</div><div class="dmeta">${esc(meta)} · ${c.id}</div>
       ${c.text ? `<div class="dtext">${esc(c.text)}</div>` : ''}
       ${impl ? '' : '<div class="note">⚠️ เอฟเฟกต์ของการ์ดนี้ยังไม่ทำงานในเวอร์ชันนี้ (ใช้เป็น GEM / สู้ด้วย POWER ได้ตามปกติ)</div>'}
       <div class="btns"></div>`;
+    box.querySelector('.artslot').replaceWith(artEl(c, 'big'));
     const btns = box.querySelector('.btns');
     const add = (label, fn, primary, disabled, title) => { const b = document.createElement('button'); b.textContent = label; if (primary) b.className = 'primary'; b.disabled = !!disabled; if (title) b.title = title; b.onclick = fn; btns.appendChild(b); return b; };
 
@@ -485,6 +507,6 @@
   }
 
   // expose for automated testing
-  window.TCUI = { get game() { return G; }, startGame, humanAsk, cardEl, toast, esc, get imgBase() { return imgBase; } };
+  window.TCUI = { get game() { return G; }, startGame, humanAsk, cardEl, artEl, toast, esc, get imgBase() { return imgBase; } };
   initStart();
 })();

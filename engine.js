@@ -345,7 +345,7 @@
     if (r && r.cancel) { pl.hell.push(inst); log(state, `ผลของ "${inst.card.name}" ถูกยกเลิก`); return { cancelled: true }; }
     if (mt === 'land') {
       if (state.land) { state.players[state.land.owner].hell.push(state.land); log(state, `Land Magic "${state.land.card.name}" ถูกส่งลงนรก`); }
-      state.land = inst; inst.owner = p; inst.usedTurn = 0;
+      state.land = inst; inst.owner = p; inst.usedTurn = 0; inst.usedBy = [];
       if (fx.magic !== true) await fx.magic(api(state), p, inst, ctx);
     } else if (mt === 'modification') {
       if (!target || !onField(state, target)) { pl.hell.push(inst); return {}; }
@@ -415,9 +415,10 @@
       if (fx && fx.activate && !a.lostAbilities && !(fx.oncePerTurn !== false && a.usedTurn === state.turn) && (!fx.canActivate || fx.canActivate(A, p, a)))
         out.push({ kind: 'avatar', uid: a.uid, label: fx.activateLabel || 'สั่งใช้' });
     });
-    if (state.land && state.land.owner === p) {
+    // Land Magic is shared: either player may use its ability in their own Main Phase (once per turn each)
+    if (state.land) {
       const fx = FX(state.land.card.id);
-      if (fx && fx.activate && state.land.usedTurn !== state.turn && (!fx.canActivate || fx.canActivate(A, p, state.land)))
+      if (fx && fx.activate && (state.land.usedBy || [])[p] !== state.turn && (!fx.canActivate || fx.canActivate(A, p, state.land)))
         out.push({ kind: 'land', uid: state.land.uid, label: fx.activateLabel || 'สั่งใช้' });
     }
     pl.hand.forEach(h => {
@@ -440,7 +441,7 @@
         await FX(h.card.id).handActivate(api(state), p, h);
       } else {
         const src = act.kind === 'land' ? state.land : findAvatar(state, uid);
-        src.usedTurn = state.turn;
+        if (act.kind === 'land') { src.usedBy = src.usedBy || []; src.usedBy[p] = state.turn; } else src.usedTurn = state.turn;
         log(state, `${pl.name} สั่งใช้ความสามารถของ "${src.card.name}"`);
         await FX(src.card.id).activate(api(state), p, src);
       }

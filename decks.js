@@ -29,22 +29,24 @@
   }
   function remove(id) { storeSaved(loadSaved().filter(d => d.id !== id)); }
 
-  // Rule Book: 50 cards, max 4 per name, exactly one "Only #1" card, LIFE 5 with distinct names.
+  const limitOf = c => c.limit || (c.onlyOne ? 1 : MAX_COPIES);
+  // Rule Book: 50 cards, max 4 per name (or the card's own limit), exactly one "Only #1" card, LIFE 5 with distinct names.
   function validate(deck) {
     const cards = byId();
     const problems = [];
     let total = 0, only = 0;
-    const perName = {};
+    const perName = {}, nameLimit = {};
     Object.entries(deck.main || {}).forEach(([id, n]) => {
       const c = cards[id];
       if (!c || !n) return;
       total += n;
       if (c.onlyOne) only += n;
       perName[c.name] = (perName[c.name] || 0) + n;
+      nameLimit[c.name] = Math.min(nameLimit[c.name] || Infinity, limitOf(c));
     });
     if (total !== MAIN_SIZE) problems.push(`Main Deck ต้องมี ${MAIN_SIZE} ใบพอดี (ตอนนี้ ${total})`);
     if (only !== 1) problems.push(`ต้องมีการ์ด Only #1 1 ใบพอดี (ตอนนี้ ${only})`);
-    Object.entries(perName).forEach(([nm, n]) => { if (n > MAX_COPIES) problems.push(`"${nm}" ใส่ได้ไม่เกิน ${MAX_COPIES} ใบ (ตอนนี้ ${n})`); });
+    Object.entries(perName).forEach(([nm, n]) => { if (n > nameLimit[nm]) problems.push(`"${nm}" ใส่ได้ไม่เกิน ${nameLimit[nm]} ใบ (ตอนนี้ ${n})`); });
     const life = (deck.life || []).filter(id => cards[id]);
     if (life.length !== LIFE_SIZE) problems.push(`LIFE Deck ต้องมี ${LIFE_SIZE} ใบ (ตอนนี้ ${life.length})`);
     if (new Set(life.map(id => cards[id].name)).size !== life.length) problems.push('LIFE Card ต้องมีชื่อไม่ซ้ำกัน');
@@ -66,5 +68,5 @@
     return { name: String(d.name || 'Deck นำเข้า').slice(0, 60), main: d.main, life: d.life };
   }
 
-  root.TCDecks = { MAIN_SIZE, LIFE_SIZE, MAX_COPIES, all, get, save, remove, validate, expand, exportText, importText, builtins, byId };
+  root.TCDecks = { MAIN_SIZE, LIFE_SIZE, MAX_COPIES, all, get, save, remove, validate, expand, exportText, importText, builtins, byId, limitOf };
 })(typeof window !== 'undefined' ? window : globalThis);

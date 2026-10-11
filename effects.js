@@ -195,6 +195,10 @@
     magic: async (A, p) => { const v = await A.choose(p, 'เลือก Avatar อีกฝ่าย นำกลับขึ้นมือ', bestOppAvatar(A, p)); const a = A.avatars(A.opp(p)).find(x => x.uid === v); if (a) A.bounce(a); },
   };
   E['KD02-016'] = pickForPoor;
+  E['KD02-017'] = { // อย่าให้มีครั้งที่ 2: cancel an opponent's React; usable even after another React this turn (once per turn by name)
+    ignoreReactLimit: true,
+    react: { on: 'magic', when: (A, p, ctx) => ctx.card.card.magicType === 'react', botScore: () => 2, run: async () => ({ cancel: true }) },
+  };
   E['KD02-018'] = futureMan;
   E['KD02-019'] = { magic: true, equipPower: (A, a) => (A.symbol(a) === 'นรก' ? 1 : 0) }; // หอกแหลม
   E['KD02-020'] = { // ประตูนรก
@@ -313,11 +317,11 @@
       void eq;
     },
   };
-  E['KD04-005'] = { payOnlyFor: c => c.symbol === 'เครื่องจักร' && c.color === 'red', onPaidAsCost: async (A, p) => A.draw(p, 1) }; // ไดบาเรีย
+  E['KD04-005'] = { payOnlyFor: c => c.symbol === 'หุ่นยนต์' && c.color === 'red', onPaidAsCost: async (A, p) => A.draw(p, 1) }; // ไดบาเรีย
   E['KD04-006'] = { substitute: (A, p, self, victim) => victim.card.id === 'KD04-003' }; // แอร์ชิด รีฟลักซ์
   E['KD04-007'] = { // เก๊าท์
     onSummon: async (A, p, self) => {
-      if (!A.avatars(p).some(a => a !== self && A.symbol(a) === 'เครื่องจักร' && A.named(a.card, 'ผู้กล้า'))) return;
+      if (!A.avatars(p).some(a => a !== self && A.symbol(a) === 'หุ่นยนต์' && A.named(a.card, 'ผู้กล้า'))) return;
       const d = A.deck(A.opp(p)); if (!d.length) return;
       const top = d.shift();
       if (isAvatar(top.card)) { A.hell(A.opp(p)).push(top); A.log(`เก๊าท์สอดแนม: "${top.card.name}" ถูกส่งลงนรก`); }
@@ -326,12 +330,12 @@
   };
   E['KD04-008'] = { equipPower: 1 };
   E['KD04-010'] = { setPower: (A, p) => A.hand(A.opp(p)).length }; // ลูกคนรวย
-  E['KD04-013'] = { magic: true, equipOk: (A, a) => A.symbol(a) === 'เครื่องจักร', equipPower: (A, a) => (A.named(a.card, 'หุ่นนักรบผู้กล้า') ? 3 : 1) };
+  E['KD04-013'] = { magic: true, equipOk: (A, a) => A.symbol(a) === 'หุ่นยนต์', equipPower: (A, a) => (A.named(a.card, 'หุ่นนักรบผู้กล้า') ? 3 : 1) };
   E['KD04-014'] = { // ไบโพล่า ชิลด์
-    magic: true, equipOk: (A, a) => A.symbol(a) === 'เครื่องจักร' && A.named(a.card, 'ผู้กล้า'),
+    magic: true, equipOk: (A, a) => A.symbol(a) === 'หุ่นยนต์' && A.named(a.card, 'ผู้กล้า'),
     preventLeave: async (A, p, m) => { if (m.usedTurn === A.state.turn) return false; m.usedTurn = A.state.turn; const d = A.dice(); A.log(`ไบโพล่า ชิลด์: ทอยลูกเต๋าได้ ${d}`); return d % 2 === 0; },
   };
-  E['KD04-015'] = { magic: true, equipOk: (A, a) => A.symbol(a) === 'เครื่องจักร' };
+  E['KD04-015'] = { magic: true, equipOk: (A, a) => A.symbol(a) === 'หุ่นยนต์' };
   E['KD04-017'] = { // Micro Plaza
     magic: true,
     activateLabel: 'ทิ้ง 1: ค้นหาการ์ดสวมใส่จาก Deck',
@@ -341,6 +345,25 @@
   E['KD04-018'] = prosper;
   E['KD04-019'] = futureMan;
   E['KD04-021'] = lifeScout5; E['KD04-022'] = { life: async (A, p) => A.battleBuff(p) }; E['KD04-023'] = lifeDraw1; E['KD04-024'] = lifeDraw1; E['KD04-025'] = lifeDraw1;
+
+  // ล้มโต๊ะ: both hands back into their decks, shuffle, each draws 4.
+  // Owner's ruling: it can't be used unless both sides can draw all 4, and not when both decks would empty together.
+  const flipTable = {
+    canUse: (A, p) => {
+      const left = [0, 1].map(q => A.state.players[q].deck.length + A.state.players[q].hand.length - (q === p ? 1 : 0) - 4);
+      return left.every(n => n >= 0) && !left.every(n => n === 0);
+    },
+    magic: async (A, p) => {
+      for (const q of [p, A.opp(p)]) {
+        const pl = A.state.players[q];
+        pl.deck.push(...pl.hand.splice(0));
+        A.shuffleDeck(q);
+      }
+      A.log('ทั้งสองฝ่ายนำการ์ดบนมือกลับเข้า Deck แล้วสับ');
+      A.draw(p, 4); A.draw(A.opp(p), 4);
+    },
+  };
+  E['BT04-041'] = flipTable;
 
   root.TC_EFFECTS = E;
   if (typeof module !== 'undefined') module.exports = E;

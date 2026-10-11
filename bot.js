@@ -83,6 +83,16 @@
     }
     if (!alive()) return;
 
+    // 3b) build Constructs we can pay for
+    for (let guard = 0; guard < 3 && alive(); guard++) {
+      const i = pl.hand.findIndex((h, k) => h.card.type === 'construct' && En.findPayment(pl, k) && En.canBuild(state, p, k, En.findPayment(pl, k)).ok);
+      if (i < 0) break;
+      const r = await En.build(state, p, i, En.findPayment(pl, i));
+      if (!r.ok) break;
+      await wait();
+    }
+    if (!alive()) return;
+
     // 4) battle
     if (state.turn !== 1) await En.goBattle(state, p);
     if (state.phase === 'battle') {

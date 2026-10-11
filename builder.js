@@ -38,7 +38,7 @@
     const ss = $('#fSet');
     if (!ss.options.length) {
       ss.innerHTML = '<option value="all">ทุกชุด</option>' + sets.map(s => `<option value="${s}">${s}</option>`).join('');
-      $('#fType').innerHTML = '<option value="all">ทุกประเภท</option><option value="avatar">Avatar</option><option value="magic">Magic</option><option value="life">LIFE</option>';
+      $('#fType').innerHTML = '<option value="all">ทุกประเภท</option><option value="avatar">Avatar</option><option value="construct">Construct</option><option value="magic">Magic</option><option value="life">LIFE</option>';
       $('#fColor').innerHTML = '<option value="all">ทุกสี</option>' + Object.keys(COLOR_TH).map(c => `<option value="${c}">สี${COLOR_TH[c]}</option>`).join('');
       ss.onchange = () => { filters.set = ss.value; renderPool(); };
       $('#fType').onchange = () => { filters.type = $('#fType').value; renderPool(); };
@@ -71,7 +71,8 @@
       const cards = byId();
       if (Object.keys(deck.main).some(id => deck.main[id] && cards[id] && cards[id].onlyOne)) return 'ใส่การ์ด Only #1 ได้แค่ 1 ใบต่อ Deck';
     }
-    if (nameCount(c.name) >= 4) return `"${c.name}" ใส่ได้ไม่เกิน 4 ใบ`;
+    const lim = Decks().limitOf(c);
+    if (nameCount(c.name) >= lim) return `"${c.name}" ใส่ได้ไม่เกิน ${lim} ใบ`;
     return null;
   }
 
@@ -168,10 +169,10 @@
       if (c.type !== lastType) {
         lastType = c.type;
         const total = rows.filter(r => r.c.type === c.type).reduce((s, r) => s + r.n, 0);
-        const h = document.createElement('div'); h.className = 'lhead'; h.textContent = (c.type === 'life' ? 'LIFE' : c.type === 'magic' ? 'Magic' : 'Avatar') + ` (${total})`; box.appendChild(h);
+        const h = document.createElement('div'); h.className = 'lhead'; h.textContent = (c.type === 'life' ? 'LIFE' : c.type === 'magic' ? 'Magic' : c.type === 'construct' ? 'Construct' : 'Avatar') + ` (${total})`; box.appendChild(h);
       }
       const r = document.createElement('div'); r.className = 'lrow';
-      const cost = c.type === 'avatar' ? `<b class="lc c-${c.color}">${c.cost}</b>` : `<b class="lc">${c.type === 'magic' ? (MT_TH[c.magicType] || 'M')[0] : 'L'}</b>`;
+      const cost = c.type === 'avatar' || c.type === 'construct' ? `<b class="lc c-${c.color}">${c.cost}</b>` : `<b class="lc">${c.type === 'magic' ? (MT_TH[c.magicType] || 'M')[0] : 'L'}</b>`;
       r.innerHTML = `${cost}<span class="ln">${UI().esc(c.name)}${c.onlyOne ? ' <i>Only#1</i>' : ''}</span><span class="lx">×${n}</span>`;
       const minus = document.createElement('button'); minus.className = 'small'; minus.textContent = '−'; minus.setAttribute('aria-label', 'เอาออก 1 ใบ'); minus.onclick = e => { e.stopPropagation(); removeOne(c.id); };
       const plus = document.createElement('button'); plus.className = 'small'; plus.textContent = '+'; plus.setAttribute('aria-label', 'เพิ่ม 1 ใบ'); plus.disabled = !!canAdd(c); plus.onclick = e => { e.stopPropagation(); add(c); };
@@ -187,9 +188,10 @@
     if (!preview) { box.innerHTML = '<div class="empty">ชี้หรือแตะการ์ดเพื่อดูรายละเอียด</div>'; return; }
     const c = preview;
     const gem = (c.gems || []).map(g => `${g.count} ${g.color === 'colorless' ? 'ไร้สี' : 'สี' + (COLOR_TH[g.color] || g.color)}`).join(', ') || '0';
-    box.innerHTML = `<img src="${UI().imgBase + (c.img || c.id + '.png')}" alt=""><div class="dname">${UI().esc(c.name)}</div>
-      <div class="dmeta">${c.id} · ${c.type === 'magic' ? 'Magic ' + (MT_TH[c.magicType] || '') : c.type === 'life' ? 'LIFE' : 'Avatar Cost ' + c.cost + ' · POWER ' + c.power} · GEM ${gem}${c.symbol ? ' · ' + c.symbol : ''}${(c.tags || []).length ? ' · ' + c.tags.join(', ') : ''}</div>
+    box.innerHTML = `<div class="artslot"></div><div class="dname">${UI().esc(c.name)}</div>
+      <div class="dmeta">${c.id} · ${c.type === 'magic' ? 'Magic ' + (MT_TH[c.magicType] || '') : c.type === 'life' ? 'LIFE' : (c.type === 'construct' ? 'Construct' : 'Avatar') + ' Cost ' + c.cost + ' · POWER ' + c.power} · GEM ${gem}${c.symbol ? ' · ' + c.symbol : ''}${(c.tags || []).length ? ' · ' + c.tags.join(', ') : ''}</div>
       ${c.text ? `<div class="dtext">${UI().esc(c.text)}</div>` : ''}`;
+    box.querySelector('.artslot').replaceWith(UI().artEl(c, 'big'));
   }
 
   window.TCBuilder = { open };
