@@ -543,10 +543,19 @@
     }
   }
 
+  function countHellToDeck(state) {
+    state.players.forEach(pl => pl.deck.forEach(c => {
+      if (c.leftHellTurn !== state.turn || c.countedBackTurn === state.turn) return;
+      c.countedBackTurn = state.turn;
+      if (pl.hellToDeckTurn !== state.turn) { pl.hellToDeckTurn = state.turn; pl.hellToDeckN = 0; }
+      pl.hellToDeckN++;
+    }));
+  }
+
   // React window: let player `rp` respond to an event with a React Magic in hand.
   async function reactWindow(state, rp, trigger, ctx) {
     if (state.winner != null) return null;
-    if (state.noReactFor === rp) return null;
+    if (state.noReactFor === rp || state.noReactAll) return null;
     const pl = state.players[rp];
     if (pl.noReactTurn === state.turn) return null;
     const reactBlocked = state.players[opp(rp)].avatars.some(a => { const f = FX(a.card.id); return f && f.blockOppMagic && !a.lostAbilities && f.blockOppMagic(api(state), a).includes('react'); });
@@ -605,49 +614,53 @@
   // ----- activated abilities (สั่งใช้) -----
   function activatables(state, p) {
     const out = [];
-    if (mainCheck(state, p)) return out;
+    if (state.winner != null || state.active !== p || state.resolving || (state.phase !== 'main' && state.phase !== 'battle')) return out;
     const pl = state.players[p];
     const A = api(state);
-    if (pl.linkTurn !== state.turn) pl.avatars.forEach(x => pl.avatars.forEach(y => { if (canLinkPair(x, y)) out.push({ kind: 'link', uid: `link:${x.uid}:${y.uid}`, src: x.uid, label: `จับคู่ [Link] กับ ${y.card.name}` }); }));
+    const okNow = (fx, src) => state.phase === 'main' || !!(fx && fx.battleOk && (fx.battleOk === true || fx.battleOk(A, p, src)));
+    if (state.phase === 'main' && pl.linkTurn !== state.turn) pl.avatars.forEach(x => pl.avatars.forEach(y => { if (canLinkPair(x, y)) out.push({ kind: 'link', uid: `link:${x.uid}:${y.uid}`, src: x.uid, label: `จับคู่ [Link] กับ ${y.card.name}` }); }));
     pl.avatars.forEach(a => {
       const fx = FX(a.card.id);
-      if (fx && fx.activate && !a.lostAbilities && !isLocked(state, p, a.card) && !isFrozen(state, p, a.card) && !(fx.oncePerTurn !== false && a.usedTurn === state.turn) && (!fx.canActivate || fx.canActivate(A, p, a)))
+      if (fx && fx.activate && okNow(fx, a) && !a.lostAbilities && !isLocked(state, p, a.card) && !isFrozen(state, p, a.card) && !(fx.oncePerTurn !== false && a.usedTurn === state.turn) && (!fx.canActivate || fx.canActivate(A, p, a)))
         out.push({ kind: 'avatar', uid: a.uid, label: fx.activateLabel || 'สั่งใช้' });
     });
     // Land Magic is shared: either player may use its ability in their own Main Phase (once per turn each)
     if (state.land) {
       const fx = FX(state.land.card.id);
-      if (fx && fx.activate && (state.land.usedBy || [])[p] !== state.turn && (!fx.canActivate || fx.canActivate(A, p, state.land)))
+      if (fx && fx.activate && okNow(fx, state.land) && (state.land.usedBy || [])[p] !== state.turn && (!fx.canActivate || fx.canActivate(A, p, state.land)))
         out.push({ kind: 'land', uid: state.land.uid, label: fx.activateLabel || 'สั่งใช้' });
+      // a second, separately limited ability on the same Land (โคกอีสานนูน)
+      if (fx && fx.activate2 && okNow(fx, state.land) && (state.land.usedBy2 || [])[p] !== state.turn && (!fx.canActivate2 || fx.canActivate2(A, p, state.land)))
+        out.push({ kind: 'land', uid: 'land2:' + state.land.uid, src: state.land.uid, label: fx.activateLabel2 || 'สั่งใช้ (ความสามารถที่ 2)' });
     }
     pl.constructs.forEach(c => {
       const fx = FX(c.card.id);
-      if (fx && fx.activate && c.usedTurn !== state.turn && (!fx.canActivate || fx.canActivate(A, p, c)))
+      if (fx && fx.activate && okNow(fx, c) && c.usedTurn !== state.turn && (!fx.canActivate || fx.canActivate(A, p, c)))
         out.push({ kind: 'construct', uid: c.uid, label: fx.activateLabel || 'สั่งใช้' });
     });
     pl.magicZone.forEach(m => {
       const fx = FX(m.grantFx || m.card.id);
-      if (m.parked && (m.grantFx || parkedActive(state, p, m)) && fx && fx.activate && m.usedTurn !== state.turn && (!fx.canActivate || fx.canActivate(A, p, m)))
+      if (m.parked && (m.grantFx || parkedActive(state, p, m)) && fx && fx.activate && okNow(fx, m) && m.usedTurn !== state.turn && (!fx.canActivate || fx.canActivate(A, p, m)))
         out.push({ kind: 'parked', uid: m.uid, label: fx.activateLabel || 'สั่งใช้' });
     });
     pl.hell.forEach(h => {
       const fx = FX(h.card.id);
-      if (fx && fx.hellActivate && h.hellUsed !== state.turn && (!fx.canHellActivate || fx.canHellActivate(A, p, h)))
+      if (fx && fx.hellActivate && okNow(fx, h) && h.hellUsed !== state.turn && (!fx.canHellActivate || fx.canHellActivate(A, p, h)))
         out.push({ kind: 'hell', uid: h.uid, label: fx.hellActivateLabel || 'สั่งใช้จากนรก' });
     });
     pl.dark.forEach(h => {
       const fx = FX(h.card.id);
-      if (fx && fx.darkActivate && h.darkUsed !== state.turn && (!fx.canDarkActivate || fx.canDarkActivate(A, p, h)))
+      if (fx && fx.darkActivate && okNow(fx, h) && h.darkUsed !== state.turn && (!fx.canDarkActivate || fx.canDarkActivate(A, p, h)))
         out.push({ kind: 'dark', uid: h.uid, label: fx.darkActivateLabel || 'สั่งใช้จากมิติมืด' });
     });
     pl.magicZone.forEach(m => {
       const fx = FX(m.card.id); const host = m.attachedTo && findAvatar(state, m.attachedTo);
-      if (host && host.owner === p && fx && fx.equipActivate && m.usedTurn !== state.turn && (!fx.canEquipActivate || fx.canEquipActivate(A, p, m, host)))
+      if (host && host.owner === p && fx && fx.equipActivate && okNow(fx, m) && m.usedTurn !== state.turn && (!fx.canEquipActivate || fx.canEquipActivate(A, p, m, host)))
         out.push({ kind: 'equip', uid: m.uid, src: host.uid, label: fx.equipActivateLabel || 'สั่งใช้' });
     });
     pl.hand.forEach(h => {
       const fx = FX(h.card.id);
-      if (fx && fx.handActivate && !isLocked(state, p, h.card) && (!fx.canHandActivate || fx.canHandActivate(A, p, h)))
+      if (fx && fx.handActivate && okNow(fx, h) && !isLocked(state, p, h.card) && (!fx.canHandActivate || fx.canHandActivate(A, p, h)))
         out.push({ kind: 'hand', uid: h.uid, label: fx.handActivateLabel || 'สั่งใช้จากมือ' });
     });
     return out;
@@ -666,6 +679,14 @@
         await show(state, 'activate', { p, uid: x.uid, card: x.card });
         for (const [s1, s2] of [[x, y], [y, x]]) { const f = FX(s1.card.id); if (f && f.onLink && !s1.lostAbilities && onField(state, s1)) await f.onLink(api(state), p, s1, s2); }
         for (const h of pl.hell.slice()) { const f = FX(h.card.id); if (f && f.onLinkFromHell && pl.hell.includes(h)) await f.onLinkFromHell(api(state), p, h, x, y); }
+        return ok();
+      }
+      if (act.kind === 'land' && String(uid).startsWith('land2:')) {
+        const src = state.land; src.usedBy2 = src.usedBy2 || []; src.usedBy2[p] = state.turn;
+        log(state, `${pl.name} สั่งใช้ความสามารถที่ 2 ของ "${src.card.name}"`);
+        await show(state, 'activate', { p, uid: src.uid, card: src.card });
+        state.srcMagic = (state.srcMagic || 0) + 1;
+        try { await FX(src.card.id).activate2(api(state), p, src); } finally { state.srcMagic--; }
         return ok();
       }
       if (act.kind === 'hell') {
@@ -862,7 +883,7 @@
       const t = ts.find(x => (x.kind === 'life' ? 'life' : x.uid) === v);
       if (t) target = t;
     }
-    a.rested = true;
+    if (!state.fightNoRest) a.rested = true;
     state.attackCount = state.attackCount || [0, 0]; state.attackCount[p]++;
     // Step 1: สามัคคี / แทงหลัง
     let bonus = 0; const backstabbers = [], supported = [];
@@ -1241,8 +1262,14 @@
         return got;
       },
       toHand: (p, inst) => { state.players[p].hand.push(inst); log(state, `${state.players[p].name} นำ "${inst.card.name}" ขึ้นมือ`); },
-      takeFrom: (zone, inst) => { const i = zone.indexOf(inst); if (i >= 0) zone.splice(i, 1); return inst; },
-      shuffleDeck: p => shuffle(state, state.players[p].deck),
+      takeFrom: (zone, inst) => { const i = zone.indexOf(inst); if (i >= 0) { zone.splice(i, 1); if (state.players.some(q => q.hell === zone)) inst.leftHellTurn = state.turn; } return inst; },
+      shuffleDeck: p => { countHellToDeck(state); shuffle(state, state.players[p].deck); },
+      hellToDeckThisTurn: p => { countHellToDeck(state); const pl = state.players[p]; return pl.hellToDeckTurn === state.turn ? pl.hellToDeckN : 0; },
+      fight: async (p, a, d) => {
+        state.fightNoRest = true; state.noReactAll = true; state.noShield = true;
+        try { await doAttack(state, p, a.uid, { kind: 'avatar', uid: d.uid }, []); for (const x of state.players.flatMap(q => q.avatars.slice())) if (x.destroyAfterBattle) { x.destroyAfterBattle = false; await destroyAvatar(state, x, 'หลังจบการต่อสู้'); } await sweepZero(state); }
+        finally { state.fightNoRest = false; state.noReactAll = false; state.noShield = false; state.battlePair = null; }
+      },
       // pick from a zone list by predicate (with player choice)
       pickFrom: async (p, zone, pred, title, optional) => {
         const can = zone.filter(c => pred(c.card, c));

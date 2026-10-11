@@ -350,6 +350,7 @@
   }
 
   function myTurn(ph) { return G && G.winner == null && !busy && G.active === ME && (!ph || G.phase === ph); }
+  const actTurn = () => myTurn('main') || myTurn('battle'); // some abilities may also be used in our Battle Phase
 
   // ---------- render ----------
   function render() {
@@ -390,7 +391,7 @@
     const [consZ, cons] = zoneBox('cons', 'Construct Zone', 'สูงสุด 3 ใบ');
     pl.constructs.forEach(c => {
       const t = targets.some(x => x.kind === 'construct' && x.uid === c.uid);
-      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === c.uid);
+      const can = isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === c.uid);
       cons.appendChild(cardEl(c.card, { uid: c.uid, cls: 'mini' + (t ? ' target' : '') + (can ? ' can' : '') + (selected && selected.uid === c.uid ? ' sel' : ''), power: En.constructPower(G, c),
         onclick: () => { if (mode && mode.kind === 'attack' && !isMe) return doAttack({ kind: 'construct', uid: c.uid }); select('construct', c); } }));
     });
@@ -398,7 +399,7 @@
     // Land Magic Zone (one shared Land; it sits on the mat of whoever placed it)
     const [landZ, land] = zoneBox('land', 'Land Magic', G.land && G.land.owner === p ? 'ใช้ได้ทั้งสองฝ่าย' : '');
     if (G.land && G.land.owner === p) {
-      const can = myTurn('main') && En.activatables(G, ME).some(x => x.kind === 'land');
+      const can = actTurn() && En.activatables(G, ME).some(x => x.kind === 'land');
       land.appendChild(cardEl(G.land.card, { uid: G.land.uid, cls: 'mini' + (can ? ' can' : '') + (selected && selected.uid === G.land.uid ? ' sel' : ''), onclick: () => select('land', G.land) }));
     }
 
@@ -423,7 +424,7 @@
     const avRow = isMe ? 1 : 2, mgRow = isMe ? 2 : 1;
     const cell = (cls, col, row) => { const c = document.createElement('div'); c.className = cls; c.style.gridColumn = col; c.style.gridRow = row; cols.appendChild(c); return c; };
     const magicEl = m => {
-      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
+      const can = isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
       const el = cardEl(m.card, { uid: m.uid, cls: 'mg' + (can ? ' can' : '') + (selected && selected.uid === m.uid ? ' sel' : ''), onclick: () => select('magic', m) });
       const host = En.findAvatar(G, m.attachedTo); if (host) el.title = m.card.name + ' → ' + host.card.name;
       return el;
@@ -438,7 +439,7 @@
       if (targets.some(t => t.kind === 'avatar' && t.uid === a.uid)) cls += ' target';
       if (isMe && mode && mode.kind === 'attack' && mode.uid === a.uid) cls += ' sel';
       if (isMe && myTurn('battle') && !mode && !a.rested && En.attackTargets(G, ME, a.uid).length) cls += ' can';
-      if (isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === a.uid || x.src === a.uid)) cls += ' can';
+      if (isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === a.uid || x.src === a.uid)) cls += ' can';
       if (a.linked) cls += ' linked';
       ac.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
       const mine = pl.magicZone.filter(m => m.attachedTo === a.uid);
@@ -454,7 +455,7 @@
     if (top) hell.appendChild(cardEl(top.card, { cls: 'mini', onclick: () => viewZone(p, 'hell') }));
     hellZ.onclick = () => viewZone(p, 'hell'); hellZ.classList.add('click');
     // abilities usable from hell (ลุงไนท์, ดาบศักดิ์สิทธิ์ อาลอนไดร์ท ...)
-    const hellActs = isMe && myTurn('main') ? En.activatables(G, ME).filter(x => x.kind === 'hell' || x.kind === 'dark') : [];
+    const hellActs = isMe && actTurn() ? En.activatables(G, ME).filter(x => x.kind === 'hell' || x.kind === 'dark') : [];
     if (hellActs.length) hell.appendChild(chip(`สั่งใช้จากนรก/มิติมืด (${hellActs.length})`, async () => {
       const v = await humanAsk({ title: 'สั่งใช้ความสามารถจากนรก / มิติมืด', optional: true, options: hellActs.map(x => { const h = pl.hell.concat(pl.dark).find(c => c.uid === x.uid); return { label: `${h.card.name}${x.kind === 'dark' ? ' (มิติมืด)' : ''}: ${x.label}`, card: h.card, value: x.uid }; }) });
       if (v != null) act(() => En.activate(G, ME, v));
