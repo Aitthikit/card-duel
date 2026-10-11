@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talingchan Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- start screen -->
+  <section id="start" class="screen">
+    <div class="start-box">
+      <h1>Battle of Talingchan<br><span>DUEL vs BOT</span></h1>
+      <p class="sub">เลือก Deck ของทั้งสองฝ่ายแล้วดวลกับบอท · กฎตาม Rule Book ver. 3.2</p>
+      <div class="pick">
+        <label>Deck ของคุณ <select id="myDeck"></select><span id="myInfo" class="dinfo"></span></label>
+        <label>Deck ของบอท <select id="botDeck"></select><span id="botInfo" class="dinfo"></span></label>
+        <label>เริ่มก่อน <select id="firstSel"><option value="rand">สุ่ม (เป่ายิงฉุบ)</option><option value="0">คุณ</option><option value="1">บอท</option></select></label>
+        <label>ความเร็วบอท <select id="speedSel"><option value="900">ช้า</option><option value="550" selected>ปกติ</option><option value="200">เร็ว</option></select></label>
+      </div>
+      <div class="deckbtns">
+        <button id="newDeckBtn">+ จัด Deck ใหม่</button>
+        <button id="editMyBtn">แก้ไข Deck ของคุณ</button>
+        <button id="editBotBtn">แก้ไข Deck ของบอท</button>
+        <button id="deleteBtn">ลบ Deck</button>
+        <button id="ioBtn">นำเข้า / ส่งออก</button>
+      </div>
+      <button id="startBtn" class="big">เริ่มดวล</button>
+      <details class="howto">
+        <summary>วิธีเล่นแบบย่อ</summary>
+        <ul>
+          <li><b>อัญเชิญ</b>: กดการ์ด Avatar บนมือ → เลือกการ์ดบนมือที่จะทิ้งลงนรกเป็น GEM ให้ครบ Cost (สี GEM ต้องตรงกับสีการ์ด, GEM ไร้สีใช้ได้ทุกสี, ห้ามจ่ายเกินจำเป็น)</li>
+          <li><b>Magic</b>: ไม่มี Cost แต่ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น (Normal / Modification / React / Land)</li>
+          <li><b>Land Magic</b>: มีช่องเดียวกลางสนาม ความสามารถของ Land ใช้ได้ทั้งสองฝ่าย (สั่งใช้ได้ฝ่ายละ 1 ครั้งต่อเทิร์นในเทิร์นของตัวเอง) วาง Land ใหม่จะทับใบเดิม</li>
+          <li><b>โจมตี</b>: เข้า Battle Phase → กด Avatar ของเรา → เลือกเป้าหมาย POWER มากกว่าชนะ เท่ากันตายคู่</li>
+          <li>โจมตี LIFE ได้เมื่ออีกฝ่ายไม่มี Avatar (หรือมี “เตะไข่”) ครั้งละ 1 ใบ เมื่อหงายครบ 5 ใบ = สถานะ “สาหัส” โดนอีกครั้งแพ้</li>
+          <li>การ์ดใน Deck หมด = แพ้ทันที</li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+
+  <!-- deck builder -->
+  <section id="builder" class="screen hidden">
+    <div class="bhead">
+      <label class="bname">ชื่อ Deck <input id="bName" maxlength="60"></label>
+      <div id="bStatus" class="bstatus"></div>
+      <div class="bbtns"><button id="bFill">เติมให้ครบ</button><button id="bClear">ล้าง</button><button id="bCancel">ยกเลิก</button><button id="bSave" class="primary">บันทึก Deck</button></div>
+    </div>
+    <div class="bbody">
+      <div class="bpoolwrap">
+        <div class="bfilters"><select id="fSet" aria-label="ชุดการ์ด"></select><select id="fType" aria-label="ประเภท"></select><select id="fColor" aria-label="สี"></select><input id="fQ" placeholder="ค้นหาชื่อ / รหัส / ข้อความ" aria-label="ค้นหา"><span id="bPoolCount" class="muted"></span></div>
+        <div id="bPool" class="bpool"></div>
+      </div>
+      <div class="bside">
+        <div id="bPreview" class="detail bpreview"></div>
+        <div id="bList" class="blist"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- duel screen -->
+  <section id="duel" class="screen hidden">
+    <div class="board">
+      <div class="side opp" id="oppSide"></div>
+      <div class="midbar">
+        <div id="phaseBar" class="phasebar"></div>
+        <div id="landZone" class="landzone"></div>
+        <div class="actions">
+          <button id="battleBtn">⚔️ Battle Phase</button>
+          <button id="endBtn">จบเทิร์น ▶</button>
+        </div>
+      </div>
+      <div class="side me" id="meSide"></div>
+      <div id="hint" class="hint"></div>
+      <div id="hand" class="hand"></div>
+    </div>
+    <aside class="panel">
+      <div id="detail" class="detail"><div class="placeholder">แตะการ์ดเพื่อดูรายละเอียด</div></div>
+      <div class="logwrap"><div class="logtitle">บันทึกการดวล</div><div id="log" class="log"></div></div>
+      <button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button>
+    </aside>
+  </section>
+
+  <div id="modal" class="modal hidden"><div class="modal-box"><div id="modalTitle" class="modal-title"></div><div id="modalBody" class="modal-body"></div><div id="modalFoot" class="modal-foot"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+</div>
+<script src="cards.js"></script>
+<script src="effects.js"></script>
+<script src="engine.js"></script>
+<script src="bot.js"></script>
+<script src="decks.js"></script>
+<script src="builder.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
