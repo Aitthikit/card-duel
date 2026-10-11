@@ -354,6 +354,7 @@
   // ---------- render ----------
   function render() {
     if (!G) return;
+    const oh = $('#oppHand'); if (oh) { oh.innerHTML = ''; G.players[BOT].hand.forEach(() => oh.appendChild(cardEl(null, { cls: 'oh' }))); oh.dataset.n = G.players[BOT].hand.length; }
     renderSide(BOT, $('#oppSide'));
     renderSide(ME, $('#meSide'));
     renderHand();
@@ -409,17 +410,28 @@
     pl.life.forEach(l => {
       const d = document.createElement('div'); d.className = 'life' + (l.faceUp ? ' up' : '');
       d.title = l.faceUp ? l.card.name + ': ' + l.card.text : 'LIFE Card (คว่ำ)';
-      if (l.faceUp) { d.textContent = l.card.name; d.onclick = e => { if (lifeTarget) return; e.stopPropagation(); select('life', l); }; }
+      if (l.faceUp) { d.appendChild(cardEl(l.card, { cls: 'side' })); d.onclick = e => { if (lifeTarget) return; e.stopPropagation(); select('life', l); }; }
       lifebox.appendChild(d);
     });
 
-    // Avatar Zone
+    // Avatar Zone + Magic Zone: the zone boxes are drawn behind one grid of columns, so each Magic
+    // card sits right under (or, on the opponent's mat, above) the Avatar it is attached to
     const avMax = Math.max(En.avatarLimit(G, p), pl.avatars.length);
-    const [avZ, av] = zoneBox('av', 'Avatar Zone', `สูงสุด ${avMax} ใบ`);
-    av.classList.add('avzone');
+    const [avZ] = zoneBox('av', 'Avatar Zone', `สูงสุด ${avMax} ใบ`);
+    const [magZ] = zoneBox('magic', 'Magic Zone', 'Magic ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น');
+    const cols = document.createElement('div'); cols.className = 'avcols';
+    const avRow = isMe ? 1 : 2, mgRow = isMe ? 2 : 1;
+    const cell = (cls, col, row) => { const c = document.createElement('div'); c.className = cls; c.style.gridColumn = col; c.style.gridRow = row; cols.appendChild(c); return c; };
+    const magicEl = m => {
+      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
+      const el = cardEl(m.card, { uid: m.uid, cls: 'mg' + (can ? ' can' : '') + (selected && selected.uid === m.uid ? ' sel' : ''), onclick: () => select('magic', m) });
+      const host = En.findAvatar(G, m.attachedTo); if (host) el.title = m.card.name + ' → ' + host.card.name;
+      return el;
+    };
+    const placed = new Set();
     for (let i = 0; i < avMax; i++) {
-      const a = pl.avatars[i];
-      if (!a) { const s = document.createElement('div'); s.className = 'slot'; av.appendChild(s); continue; }
+      const a = pl.avatars[i], ac = cell('avc', i + 1, avRow);
+      if (!a) { const s = document.createElement('div'); s.className = 'slot'; ac.appendChild(s); continue; }
       const eqs = En.attachedTo(G, a);
       let cls = a.rested ? 'rested' : '';
       if (selected && selected.uid === a.uid) cls += ' sel';
@@ -428,19 +440,13 @@
       if (isMe && myTurn('battle') && !mode && !a.rested && En.attackTargets(G, ME, a.uid).length) cls += ' can';
       if (isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === a.uid || x.src === a.uid)) cls += ' can';
       if (a.linked) cls += ' linked';
-      av.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
+      ac.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
+      const mine = pl.magicZone.filter(m => m.attachedTo === a.uid);
+      if (mine.length) { const mc = cell('mgc', i + 1, mgRow); mine.forEach(m => { placed.add(m.uid); mc.appendChild(magicEl(m)); }); }
     }
-
-    // Magic Zone (Modification cards worn by avatars)
-    const [magZ, mag] = zoneBox('magic', 'Magic Zone', 'Magic ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น');
-    pl.magicZone.forEach(m => {
-      const host = En.findAvatar(G, m.attachedTo);
-      const w = document.createElement('div'); w.className = 'mwrap';
-      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
-      w.appendChild(cardEl(m.card, { uid: m.uid, cls: 'mini' + (can ? ' can' : '') + (selected && selected.uid === m.uid ? ' sel' : ''), onclick: () => select('magic', m) }));
-      if (host) { const t = document.createElement('div'); t.className = 'host'; t.textContent = '→ ' + host.card.name; w.appendChild(t); }
-      mag.appendChild(w);
-    });
+    // Magic that stays on the field without a host (or whose host is on the other side) gets its own columns
+    let col = avMax;
+    pl.magicZone.filter(m => !placed.has(m.uid)).forEach(m => cell('mgc', ++col, mgRow).appendChild(magicEl(m)));
 
     // Hell (top card face up) and Deck (card back)
     const [hellZ, hell] = zoneBox('hell', 'Hell', `นรก ${pl.hell.length}`);
@@ -458,7 +464,7 @@
     const reveal = G.players.some(x => x.avatars.some(a => (FX(a.card.id) || {}).revealTop && !a.lostAbilities));
     if (pl.deck.length) { const b = cardEl(reveal ? pl.deck[0].card : null, { cls: 'mini' }); b.dataset.n = pl.deck.length; if (reveal) b.title = 'การ์ดบนสุดของ Deck (หงายด้วยฮามดัล)'; deck.appendChild(b); }
 
-    [consZ, landZ, infoZ, lifeZ, avZ, magZ, hellZ, deckZ].forEach(z => root.appendChild(z));
+    [consZ, landZ, infoZ, lifeZ, avZ, magZ, cols, hellZ, deckZ].forEach(z => root.appendChild(z));
   }
 
   function chip(text, onclick, target) {
@@ -695,6 +701,25 @@
     const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
     clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), 2600);
   }
+
+  // ----- scaled stage: fill the window at any resolution, phone included -----
+  function fitStage() {
+    const d = $('#duel'); if (!d) return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const portrait = vw < vh * 0.95;
+    const minW = portrait ? 780 : 1500, minH = portrait ? 1180 : 860;
+    const sc = Math.min(vw / minW, vh / minH);
+    d.classList.add('stage'); d.classList.toggle('portrait', portrait);
+    d.style.setProperty('--sc', sc); d.style.setProperty('--sw', (vw / sc) + 'px'); d.style.setProperty('--sh', (vh / sc) + 'px');
+    if (!portrait) $('#panel').classList.remove('open');
+    const btn = $('#panelBtn'), acts = $('#duel .actions'); if (acts && btn.parentNode !== acts) acts.appendChild(btn);
+    document.documentElement.style.setProperty('--mz', Math.max(1, Math.min(sc, 1.6)));
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', () => setTimeout(fitStage, 150));
+  $('#panelBtn').onclick = e => { e.stopPropagation(); $('#panel').classList.toggle('open'); };
+  $('#duel').addEventListener('click', e => { const p = $('#panel'); if (p.classList.contains('open') && !p.contains(e.target) && e.target.id !== 'panelBtn') p.classList.remove('open'); });
+  fitStage();
 
   // expose for automated testing
   window.TCUI = { get game() { return G; }, startGame, humanAsk, cardEl, artEl, toast, esc, get imgBase() { return imgBase; } };

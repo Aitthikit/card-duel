@@ -301,3 +301,75 @@ optgroup { background: #141b3d; }
 .z-life .zb { align-items: stretch; padding: 0 2px; }
 .z-life .life { width: auto; max-width: none; }
 .mz.z-life.lifebox { align-items: stretch; gap: 0; }
+
+/* ---------- scaled stage: the duel screen is laid out at a fixed design size and scaled to fill any window ---------- */
+#duel.stage { position: fixed; left: 0; top: 0; transform-origin: 0 0; width: var(--sw, 1500px); height: var(--sh, 860px); transform: scale(var(--sc, 1));
+  grid-template-columns: 1fr 300px; padding: 10px 14px; gap: 10px; --cw: 84px; --mw: 48px; overflow: hidden; min-height: 0; }
+#duel.stage.hidden { display: none !important; }
+#duel.stage .board { overflow: hidden; height: 100%; min-height: 0; gap: 6px; }
+#duel.stage .panel { height: 100%; min-height: 0; }
+#duel.stage .side.mat { flex: 1 1 0; min-height: 0; padding: 8px; gap: 6px; grid-template-columns: 92px 1fr 120px 1fr 96px; grid-template-rows: auto minmax(0, 1fr) auto; }
+#duel.stage .side.mat.me { grid-template-areas: "cons cons land info info" "life av av av hell" "life magic magic magic deck"; }
+#duel.stage .side.mat.opp { grid-template-areas: "deck magic magic magic life" "hell av av av life" "info info land cons cons"; }
+#duel.stage .side.mat .card:not(.mini), #duel.stage .side.mat .slot { --cw: 74px; }
+#duel.stage .z-av .zb { min-height: calc(74px * 1.36 + 10px); gap: 10px; }
+#duel.stage .mz .zl { font-size: 22px; }
+#duel.stage .z-av .zl { font-size: 32px; }
+#duel.stage .midbar { grid-template-columns: 1fr auto 1fr; flex: none; }
+#duel.stage .hint { flex: none; }
+#duel.stage .hand { flex: none; min-height: calc(84px * 1.36 + 24px); }
+#duel.stage .panel .logwrap { max-height: none; }
+.panelbtn { display: none; }
+/* portrait / phone: one column, the card detail and duel log slide in as a drawer */
+#duel.stage.portrait { grid-template-columns: 1fr; padding: 8px; }
+#duel.stage.portrait .panelbtn { display: inline-block; font-size: 20px; padding: 12px 18px; }
+.modal-box { zoom: var(--mz, 1); }
+#duel.stage.portrait .panel { position: absolute; top: 0; right: 0; bottom: 0; width: 480px; max-width: 92%; z-index: 45; background: var(--panel); border-left: 1px solid var(--line); padding: 12px; box-shadow: -10px 0 40px rgba(0,0,0,.6); transform: translateX(105%); transition: transform .2s ease; font-size: 18px; }
+#duel.stage.portrait .panel.open { transform: none; }
+#duel.stage.portrait .hand { min-height: calc(96px * 1.36 + 24px); }
+#duel.stage.portrait .hand .card { --cw: 96px; }
+#duel.stage.portrait .midbar button { font-size: 20px; padding: 12px 22px; }
+
+/* ---------- card backs ---------- */
+.card.back { background: #111 url('backs/card-back.png') center / cover no-repeat; border: none; }
+.card.back::after { content: none; }
+.life:not(.up) { background: #b0252a url('backs/life-back.png') center 25% / cover no-repeat; border: 1px solid rgba(255,255,255,.55); }
+
+/* ---------- playmat layout (user's mock-up): bot hand on top, Magic under its Avatar, LIFE as sideways cards ---------- */
+.ohand { display: none; }
+#duel.stage .ohand { --OH: 50px; flex: none; display: flex; justify-content: center; gap: 4px; min-height: calc(var(--OH) * 1.36); }
+#duel.stage.portrait .ohand { --OH: 68px; }
+.ohand .card.oh { --cw: var(--OH); transform: rotate(180deg); cursor: default; }
+#duel.stage .side.mat { container-type: size; --MI: calc(var(--AV) * .6); --MG: calc(var(--AV) * .8); --mw: var(--MI); --LW: 96px; --LH: calc(var(--LW) / 1.36);
+  --AV: min(calc((100cqh - 34px) / 2.45), calc((100cqw - 620px) / 4.6), 150px);
+  grid-template-columns: 110px minmax(0, 2.4fr) minmax(0, 1fr) 170px 96px; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+#duel.stage .side.mat.me { grid-template-areas: "life av cons info hell" "life magic cons land deck"; }
+#duel.stage .side.mat.opp { grid-template-columns: 96px 170px minmax(0, 1fr) minmax(0, 2.4fr) 110px; grid-template-areas: "deck land cons magic life" "hell info cons av life"; }
+#duel.stage .side.mat.me .avcols { grid-column: 2; grid-row: 1 / 3; }
+#duel.stage .side.mat.opp .avcols { grid-column: 4; grid-row: 1 / 3; }
+#duel.stage .side.mat .card:not(.mini), #duel.stage .side.mat .slot { --cw: var(--AV); }
+#duel.stage .side.mat .card.mini { --cw: var(--MI); }
+#duel.stage .side.mat .card.mg, #duel.stage .side.mat .z-hell .card.mini, #duel.stage .side.mat .z-deck .card.mini { --cw: var(--MG); }
+#duel.stage .z-av .zb { min-height: calc(var(--AV) * 1.36 + 4px); }
+#duel.stage .z-magic .zb { min-height: calc(var(--MG) * 1.36 + 4px); }
+#duel.stage .mz .zl { font-size: 20px; }
+#duel.stage .z-av .zl { font-size: 30px; }
+.avcols { display: grid; grid-template-rows: subgrid; grid-auto-columns: max-content; justify-content: center; column-gap: 14px; position: relative; z-index: 1; pointer-events: none; padding: 0 8px; min-width: 0; }
+.avcols > * { pointer-events: auto; display: flex; align-items: center; justify-content: center; }
+.avc { min-width: var(--AV); }
+.mgc .card + .card { margin-left: calc(var(--MG) * -.6); }
+.mgc .card:hover { z-index: 2; }
+#duel.stage .z-hell .zb, #duel.stage .z-deck .zb { align-items: center; }
+/* LIFE: face-down cards turned sideways and overlapped to fit; a face-up LIFE shows its art */
+#duel.stage .z-life .zb { position: absolute; inset: 4px 4px 22px; display: grid; grid-auto-rows: minmax(0, var(--LH)); align-content: center; justify-items: center; padding: 0 0 calc(var(--LH) * .4); gap: 0; }
+#duel.stage .z-life .life { position: relative; width: var(--LW); max-width: 100%; height: var(--LH); padding: 0; border-radius: 6px; opacity: 1; font-size: 0; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+#duel.stage .z-life .life:not(.up) { background: #b0252a url('backs/life-back-h.png') center / cover no-repeat; }
+#duel.stage .z-life .life.up { background: none; border: none; }
+.z-life .life .card.side { --cw: var(--LH); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(90deg); pointer-events: none; }
+/* portrait: plenty of height, so Construct / Land / player info take a row and Magic goes under the Avatars */
+#duel.stage.portrait .side.mat { --AV: min(calc((100cqh - 60px) / 3.4), calc((100cqw - 300px) / 4.5), 150px);
+  grid-template-columns: 110px 1fr 130px 1fr 96px; grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+#duel.stage.portrait .side.mat.me { grid-template-areas: "cons cons land info info" "life av av av hell" "life magic magic magic deck"; }
+#duel.stage.portrait .side.mat.opp { grid-template-columns: 96px 1fr 130px 1fr 110px; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "deck magic magic magic life" "hell av av av life" "info info land cons cons"; }
+#duel.stage.portrait .side.mat.me .avcols { grid-column: 2 / 5; grid-row: 2 / 4; }
+#duel.stage.portrait .side.mat.opp .avcols { grid-column: 2 / 5; grid-row: 1 / 3; }

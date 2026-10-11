@@ -67,6 +67,7 @@
   <!-- duel screen -->
   <section id="duel" class="screen hidden">
     <div class="board">
+      <div class="ohand" id="oppHand" aria-label="การ์ดบนมือของบอท"></div>
       <div class="side opp" id="oppSide"></div>
       <div class="midbar">
         <div id="phaseBar" class="phasebar"></div>
@@ -79,7 +80,8 @@
       <div id="hint" class="hint"></div>
       <div id="hand" class="hand"></div>
     </div>
-    <aside class="panel">
+    <button id="panelBtn" class="panelbtn" aria-label="รายละเอียดการ์ดและบันทึกการดวล">📜 รายละเอียด</button>
+    <aside class="panel" id="panel">
       <div id="detail" class="detail"><div class="placeholder">แตะการ์ดเพื่อดูรายละเอียด</div></div>
       <div class="logwrap"><div class="logtitle">บันทึกการดวล</div><div id="log" class="log"></div></div>
       <div class="panelbtns"><label class="matpick">Playmat <select id="matSel2" aria-label="ลาย Playmat"></select></label><button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button></div>
