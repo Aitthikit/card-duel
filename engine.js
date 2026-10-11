@@ -105,7 +105,9 @@
     try { await state.onFx(type, data); } catch (e) { /* animation problems never affect the rules */ }
   }
 
-  function log(state, msg) { state.log.push({ turn: state.turn, msg }); if (state.onChange) state.onChange(); }
+  function log(state, msg) { state.log.push({ turn: state.turn, msg }); if (state.hasTokens) sweepTokens(state); if (state.onChange) state.onChange(); }
+  // Tokens stop existing once they leave the field
+  function sweepTokens(state) { state.players.forEach(pl => ['hell', 'hand', 'deck', 'dark', 'magicZone'].forEach(z => { if (pl[z].some(x => x.card.token && !(z === 'magicZone' && x.attachedTo))) pl[z] = pl[z].filter(x => !x.card.token || (z === 'magicZone' && x.attachedTo)); })); }
   function ok(extra) { return Object.assign({ ok: true }, extra); }
   function err(msg) { return { ok: false, error: msg }; }
 
@@ -757,6 +759,7 @@
   }
   // Cost of an Avatar on the field (ทหารอาณาจักรของแพง, ช่างตัดเสื้อ, ขวานไม้เน่าๆเหม็นๆ)
   function costOf(state, a) {
+    if (a.costSetTurn === state.turn) return a.costSet;
     let c = (a.card.cost || 0) + (a.costMod || 0);
     const A = api(state);
     attachedTo(state, a).forEach(m => { const f = FX(m.card.id); if (f && f.equipCost) c += f.equipCost; });
@@ -812,7 +815,7 @@
     const A = api(state);
     const t = o.avatars.filter(x => { const f = FX(x.card.id); return !(f && f.untargetable && !x.lostAbilities && f.untargetable(A, x, a)) && !o.avatars.some(src => { const sf2 = FX(src.card.id); return sf2 && sf2.shieldAllies && !src.lostAbilities && sf2.shieldAllies(A, src, x); }); }).map(x => ({ kind: 'avatar', uid: x.uid }));
     o.constructs.forEach(x => { const f = FX(x.card.id); if (!(f && f.untargetableConstruct && f.untargetableConstruct(A, x, opp(p)))) t.push({ kind: 'construct', uid: x.uid }); });
-    if ((o.avatars.length === 0 || hasAbility(state, a, 'เตะไข่')) && !o.constructs.some(c => (FX(c.card.id) || {}).noLifeAttack)) t.push({ kind: 'life' });
+    if ((o.avatars.length === 0 || hasAbility(state, a, 'เตะไข่')) && a.noLifeAttack !== state.turn && !o.constructs.some(c => (FX(c.card.id) || {}).noLifeAttack)) t.push({ kind: 'life' });
     return t;
   }
 
@@ -1022,6 +1025,7 @@
     }
     if (times === 0) log(state, 'POWER 0 — ไม่ทำความเสียหายต่อ LIFE');
     if (times > 0) for (const a of pl.avatars.slice()) { const f = FX(a.card.id); if (f && f.onLifeFlipped && !a.lostAbilities && onField(state, a) && state.winner == null) await f.onLifeFlipped(api(state), p, a); }
+    if (times > 0) for (const cs of pl.constructs.slice()) { const f = FX(cs.card.id); if (f && f.onLifeFlipped && pl.constructs.includes(cs) && state.winner == null) await f.onLifeFlipped(api(state), p, cs); }
   }
 
   // "หงาย" LIFE by an effect: the LIFE card is turned face up but its ability does not trigger (only damage triggers it)
@@ -1101,7 +1105,8 @@
     if (state.srcMagic && byP != null && byP !== owner && a.magicImmuneUntil >= state.turn) { log(state, `${a.card.name} ไม่รับผลจาก Magic Card ของอีกฝ่าย`); return; }
     if (state.srcMagic && fx && fx.magicImmune && !a.lostAbilities && (typeof fx.magicImmune !== 'function' || fx.magicImmune(A, a))) { log(state, `${a.card.name} ไม่ถูกทำลายด้วยผลของ Magic Card`); return; }
     if (state.srcMagic && !a.rested && attachedTo(state, a).some(m => (FX(m.card.id) || {}).magicShieldAwake)) { log(state, `${a.card.name} ไม่ถูกทำลายด้วยผลของ Magic Card (สภาพตื่น)`); return; }
-    if (fx && fx.preventDestroy && !a.lostAbilities && await fx.preventDestroy(A, owner, a)) return;
+    if (fx && fx.preventDestroy && !a.lostAbilities && await fx.preventDestroy(A, owner, a, byP)) return;
+    if (a.nurseUntil >= state.turn) { a.nurseUntil = 0; log(state, `${a.card.name} ไม่ถูกทำลาย (คุณพยาบาล)`); return; }
     if (!state.inBattle && byP != null && byP !== owner && state.land && (FX(state.land.card.id) || {}).landProtect && FX(state.land.card.id).landProtect(A, a)) { log(state, `${a.card.name} ไม่ถูกนำออกจากสนาม ("${state.land.card.name}")`); return; }
     for (const m of attachedTo(state, a)) {
       const f = FX(m.card.id);
