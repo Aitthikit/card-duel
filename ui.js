@@ -707,7 +707,7 @@
     const d = $('#duel'); if (!d) return;
     const vw = window.innerWidth, vh = window.innerHeight;
     const portrait = vw < vh * 0.95;
-    const minW = portrait ? 780 : 1500, minH = portrait ? 1180 : 860;
+    const minW = portrait ? 780 : 1240, minH = 1180;
     const sc = Math.min(vw / minW, vh / minH);
     d.classList.add('stage'); d.classList.toggle('portrait', portrait);
     d.style.setProperty('--sc', sc); d.style.setProperty('--sw', (vw / sc) + 'px'); d.style.setProperty('--sh', (vh / sc) + 'px');
