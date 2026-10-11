@@ -26,8 +26,9 @@
     o = o || {};
     const d = document.createElement('div');
     d.className = 'card' + (o.cls ? ' ' + o.cls : '');
+    if (o.uid) d.dataset.uid = o.uid;
     if (!card) { d.classList.add('back'); return d; }
-    d.appendChild(artEl(card));
+    d.appendChild(artEl(card, null, o.lazy));
     if (o.power != null) {
       const pw = document.createElement('div');
       pw.className = 'pw' + (o.power > (card.power || 0) ? ' up' : o.power < (card.power || 0) ? ' down' : '');
@@ -39,7 +40,7 @@
     return d;
   }
   // Card art: sprite sheets in the web build (TC_ATLAS), else the image file in refs/, else a drawn text card
-  function artEl(card, cls) {
+  function artEl(card, cls, lazy) {
     const A = window.TC_ATLAS, at = A && A.map[card.id];
     if (at) {
       const d = document.createElement('div');
@@ -53,7 +54,7 @@
     if (card.img) {
       const img = document.createElement('img');
       if (cls) img.className = cls;
-      img.alt = card.name; img.loading = 'lazy';
+      img.alt = card.name; if (lazy) img.loading = 'lazy';
       img.src = imgBase + card.img;
       img.onerror = () => img.replaceWith(textCard(card, cls));
       return img;
@@ -98,7 +99,55 @@
       box.innerHTML = v.ok ? `<span class="okline">✓ พร้อมเล่น · Main ${v.total} · LIFE ${v.lifeCount}</span>` : `<span class="badline">ยังเล่นไม่ได้: ${esc(v.problems[0])}</span>`;
     });
   }
+  // ---------- playmat skins: the zone grid always stays, only the art behind it changes ----------
+  const MATS = [
+    { id: 'black', name: 'พื้นดำ (ตาราง)', bg: 'none' },
+    { id: 'rattatui', name: 'รัททาทุย', bg: 'url("mats/rattatui.jpg")' },
+    { id: 'custom', name: 'อัปโหลดรูปเอง…' },
+  ];
+  let matCustom = null;
+  try { matCustom = localStorage.getItem('tc-duel-mat-custom'); } catch (e) { /* storage unavailable */ }
+  function applyMat(id) {
+    let m = MATS.find(x => x.id === id) || MATS[0];
+    if (m.id === 'custom' && !matCustom) m = MATS[0];
+    document.documentElement.style.setProperty('--mat-bg', m.id === 'custom' ? `url("${matCustom}")` : m.bg);
+    ['#matSel', '#matSel2'].forEach(s => { const el = $(s); if (el) el.value = m.id; });
+    try { localStorage.setItem('tc-duel-mat', m.id); } catch (e) { /* ignore */ }
+  }
+  function pickCustomMat() {
+    const f = $('#matFile');
+    f.value = '';
+    f.onchange = () => {
+      const file = f.files && f.files[0]; if (!file) return;
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        // shrink to a playmat-sized JPEG so it fits in browser storage
+        const w = Math.min(1600, img.width), h = Math.round(img.height * w / img.width);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        matCustom = c.toDataURL('image/jpeg', 0.82);
+        URL.revokeObjectURL(url);
+        try { localStorage.setItem('tc-duel-mat-custom', matCustom); } catch (e) { toast('รูปใหญ่เกินกว่าจะจำไว้ในเบราว์เซอร์ ใช้ได้เฉพาะรอบนี้'); }
+        applyMat('custom');
+      };
+      img.onerror = () => toast('เปิดรูปนี้ไม่ได้');
+      img.src = url;
+    };
+    f.click();
+  }
+  function initMats() {
+    ['#matSel', '#matSel2'].forEach(s => {
+      const el = $(s); if (!el) return;
+      el.innerHTML = MATS.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+      el.onchange = () => { if (el.value === 'custom') { applyMat(matCustom ? 'custom' : 'black'); pickCustomMat(); } else applyMat(el.value); };
+    });
+    let saved = 'black';
+    try { saved = localStorage.getItem('tc-duel-mat') || 'black'; } catch (e) { /* ignore */ }
+    applyMat(saved);
+  }
+
   function initStart() {
+    initMats();
     fillDeckSelects();
     try { const saved = JSON.parse(localStorage.getItem('tc-duel-prefs') || '{}'); if (saved.my && Decks.get(saved.my)) $('#myDeck').value = saved.my; if (saved.bot && (saved.bot === 'rand' || Decks.get(saved.bot))) $('#botDeck').value = saved.bot; if (saved.speed) $('#speedSel').value = saved.speed; } catch (e) { /* storage unavailable */ }
     renderDeckInfo();
@@ -169,6 +218,7 @@
       ],
       ask: (p, req) => (p === BOT ? Promise.resolve(Bot.botAsk(req)) : humanAsk(req)),
       onChange: () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); },
+      onFx: playFx,
     });
     mode = null; selected = null; busy = false;
     $('#start').classList.add('hidden'); $('#duel').classList.remove('hidden');
@@ -182,6 +232,100 @@
     await En.mulligan(G, ME, Array.isArray(pick) ? pick : []);
     render();
     runBotIfNeeded();
+  }
+
+  // ---------- visual effects (summon / attack / destroy / LIFE damage / magic splash / banners) ----------
+  const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fxSpeed = () => (reduceMotion() ? 0.25 : Math.max(0.55, Math.min(1.3, botSpeed / 550)));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function fxLayer() {
+    let l = document.getElementById('fx');
+    if (!l) { l = document.createElement('div'); l.id = 'fx'; l.setAttribute('aria-hidden', 'true'); document.body.appendChild(l); }
+    return l;
+  }
+  const uidEl = uid => document.querySelector(`#duel .card[data-uid="${uid}"]`);
+  const center = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r }; };
+  function spawn(cls, x, y, html, life) {
+    const d = document.createElement('div'); d.className = 'fxp ' + cls; d.style.left = x + 'px'; d.style.top = y + 'px';
+    if (html != null) d.innerHTML = html;
+    fxLayer().appendChild(d); setTimeout(() => d.remove(), life || 1500);
+    return d;
+  }
+  function banner(text, cls, ms) {
+    const b = document.createElement('div'); b.className = 'fxbanner ' + (cls || '');
+    b.innerHTML = `<div class="stripe"></div><div class="txt">${esc(text)}</div>`;
+    fxLayer().appendChild(b);
+    b.animate([{ opacity: 0 }, { opacity: 1, offset: .15 }, { opacity: 1, offset: .8 }, { opacity: 0 }], { duration: ms, easing: 'ease-out' });
+    b.querySelector('.txt').animate([{ transform: 'translateX(-60px) skewX(-12deg)', letterSpacing: '.5em' }, { transform: 'none', letterSpacing: '.12em', offset: .25 }, { transform: 'translateX(20px)' }], { duration: ms, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    setTimeout(() => b.remove(), ms);
+    return sleep(ms * .9);
+  }
+  async function playFx(type, d) {
+    if (!G || !document.getElementById('duel') || document.getElementById('duel').classList.contains('hidden')) return;
+    const k = fxSpeed();
+    render();
+    if (type === 'turn') return banner(d.p === ME ? 'ตาของคุณ' : 'ตาของบอท', d.p === ME ? 'mine' : 'theirs', 1100 * k);
+    if (type === 'battle') return banner('BATTLE PHASE', 'battle', 900 * k);
+    if (type === 'summon') {
+      const el = uidEl(d.uid); if (!el) return;
+      const c = center(el);
+      spawn('ring c-' + (d.card.color || 'none'), c.x, c.y, null, 900 * k);
+      el.animate([{ transform: 'translateY(-60px) scale(1.7)', opacity: 0, filter: 'brightness(3)' }, { transform: 'translateY(6px) scale(.96)', opacity: 1, filter: 'brightness(1.8)', offset: .6 }, { transform: 'none', filter: 'none' }], { duration: 520 * k, easing: 'cubic-bezier(.3,1.4,.5,1)' });
+      return sleep(480 * k);
+    }
+    if (type === 'activate') {
+      const el = uidEl(d.uid); if (!el) return;
+      const c = center(el); spawn('ring gold', c.x, c.y, null, 800 * k);
+      el.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(2.2) drop-shadow(0 0 12px #f5c542)' }, { filter: 'brightness(1)' }], { duration: 600 * k });
+      return sleep(450 * k);
+    }
+    if (type === 'magic') {
+      const w = document.createElement('div'); w.className = 'fxsplash ' + (d.p === ME ? 'mine' : 'theirs');
+      const art = artEl(d.card, 'big'); w.appendChild(art);
+      const lbl = document.createElement('div'); lbl.className = 'lbl';
+      lbl.textContent = (d.react ? 'ตอบโต้! ' : '') + (d.card.magicType ? d.card.magicType[0].toUpperCase() + d.card.magicType.slice(1) + ' Magic' : 'Magic');
+      w.appendChild(lbl); fxLayer().appendChild(w);
+      w.animate([{ opacity: 0, transform: 'translate(-50%,-50%) scale(.4) rotateY(80deg)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1.05) rotateY(0)', offset: .3 }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: .8 }, { opacity: 0, transform: 'translate(-50%,-50%) scale(1.25)' }], { duration: 1100 * k, easing: 'ease-out' });
+      setTimeout(() => w.remove(), 1100 * k);
+      return sleep(1000 * k);
+    }
+    if (type === 'attack') {
+      const a = uidEl(d.uid); if (!a) return;
+      const opp = d.p === ME ? BOT : ME;
+      const tEl = d.target.kind === 'avatar' ? uidEl(d.target.uid) : document.querySelector(`.lifebox[data-p="${opp}"]`) || document.getElementById(opp === BOT ? 'oppSide' : 'meSide');
+      if (!tEl) return;
+      const A = center(a), T = center(tEl);
+      const dx = (T.x - A.x) * .75, dy = (T.y - A.y) * .75;
+      a.style.zIndex = 20;
+      const anim = a.animate([{ transform: 'none' }, { transform: `translate(${-dx * .08}px,${-dy * .08}px) scale(1.12)`, offset: .25 }, { transform: `translate(${dx}px,${dy}px) scale(1.15)`, offset: .55 }, { transform: 'none' }], { duration: 760 * k, easing: 'cubic-bezier(.5,0,.3,1)' });
+      await sleep(420 * k);
+      spawn('slash', T.x, T.y, null, 600);
+      tEl.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(7px)' }, { transform: 'translateX(0)' }], { duration: 260 });
+      if (d.targetPower != null) spawn('clash', T.x, T.y - T.r.height * .7, `<b class="${d.power > d.targetPower ? 'win' : d.power < d.targetPower ? 'lose' : ''}">${d.power}</b><i>VS</i><b class="${d.targetPower > d.power ? 'win' : d.targetPower < d.power ? 'lose' : ''}">${d.targetPower}</b>`, 1300 * k);
+      await anim.finished.catch(() => {});
+      a.style.zIndex = '';
+      return sleep(200 * k);
+    }
+    if (type === 'destroy') {
+      const el = uidEl(d.uid); if (!el) return;
+      const c = center(el);
+      for (let i = 0; i < 10; i++) {
+        const s = spawn('shard', c.x, c.y, null, 900);
+        const ang = Math.random() * Math.PI * 2, dist = 40 + Math.random() * 70;
+        s.animate([{ transform: 'translate(-50%,-50%) rotate(0)', opacity: 1 }, { transform: `translate(${Math.cos(ang) * dist - 4}px,${Math.sin(ang) * dist - 4}px) rotate(${Math.random() * 540}deg)`, opacity: 0 }], { duration: 750 * k, easing: 'cubic-bezier(.2,.7,.4,1)' });
+      }
+      await el.animate([{ filter: 'brightness(1)', transform: 'none', opacity: 1 }, { filter: 'brightness(3) saturate(0)', transform: 'scale(1.08) rotate(-3deg)', offset: .3 }, { filter: 'grayscale(1) brightness(.4)', transform: 'scale(.6) rotate(8deg)', opacity: 0 }], { duration: 560 * k, easing: 'ease-in', fill: 'forwards' }).finished.catch(() => {});
+      return;
+    }
+    if (type === 'life') {
+      const box = document.querySelector(`.lifebox[data-p="${d.p}"]`);
+      const flash = document.createElement('div'); flash.className = 'fxflash' + (d.p === ME ? ' me' : ''); fxLayer().appendChild(flash);
+      flash.animate([{ opacity: 0 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 700 * k }); setTimeout(() => flash.remove(), 700 * k);
+      document.getElementById('duel').animate([{ transform: 'translate(0,0)' }, { transform: 'translate(-6px,3px)' }, { transform: 'translate(5px,-4px)' }, { transform: 'translate(-3px,2px)' }, { transform: 'none' }], { duration: 380 });
+      if (box) { const c = center(box); spawn('dmg', c.x, c.y, '−1 LIFE', 1200 * k); }
+      if (d.severe) return banner('สาหัส!', 'severe', 1000 * k);
+      return sleep(650 * k);
+    }
   }
 
   // ---------- actions ----------
@@ -218,24 +362,62 @@
     renderDetail();
   }
 
+  // Each side is drawn as a playmat: Construct / Land / player info on top, LIFE on the left,
+  // Avatar + Magic zones in the middle, Hell + Deck on the right. The opponent's mat is turned around.
+  function zoneBox(area, label, sub) {
+    const z = document.createElement('div'); z.className = 'mz z-' + area;
+    z.innerHTML = `<div class="zl">${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    const body = document.createElement('div'); body.className = 'zb'; z.appendChild(body);
+    return [z, body];
+  }
   function renderSide(p, root) {
     const pl = G.players[p], isMe = p === ME;
     root.innerHTML = '';
-    const info = document.createElement('div'); info.className = 'pinfo';
+    root.classList.add('mat');
     const up = pl.life.filter(l => l.faceUp).length;
+    const targets = mode && mode.kind === 'attack' && !isMe ? En.attackTargets(G, ME, mode.uid) : [];
+
+    // player info (where the logo sits on the playmat)
+    const [infoZ, info] = zoneBox('info', '');
+    infoZ.querySelector('.zl').remove();
     info.innerHTML = `<div class="pname ${G.active === p ? 'active' : ''}">${esc(pl.name)}</div><div class="dname-s">${esc(pl.deckName || '')}</div>
-      <div class="stat"><span>Deck</span><b>${pl.deck.length}</b></div>
-      <div class="stat"><span>มือ</span><b>${pl.hand.length}</b></div>
-      <div class="stat click" data-z="hell"><span>นรก</span><b>${pl.hell.length}</b></div>
-      <div class="stat click" data-z="dark"><span>มิติมืด</span><b>${pl.dark.length}</b></div>
+      <div class="stats"><span class="stat">มือ <b>${pl.hand.length}</b></span><span class="stat click" data-z="dark">มิติมืด <b>${pl.dark.length}</b></span></div>
       ${up === 5 ? '<div class="severe">สถานะ "สาหัส"</div>' : ''}`;
     info.querySelectorAll('[data-z]').forEach(el => el.onclick = () => viewZone(p, el.dataset.z));
 
-    const zones = document.createElement('div'); zones.className = 'zones';
-    const av = document.createElement('div'); av.className = 'avzone';
-    const sub = document.createElement('div'); sub.className = 'subzone';
-    const targets = mode && mode.kind === 'attack' && !isMe ? En.attackTargets(G, ME, mode.uid) : [];
-    for (let i = 0; i < En.MAX_AVATARS; i++) {
+    // Construct Zone
+    const [consZ, cons] = zoneBox('cons', 'Construct Zone', 'สูงสุด 3 ใบ');
+    pl.constructs.forEach(c => {
+      const t = targets.some(x => x.kind === 'construct' && x.uid === c.uid);
+      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === c.uid);
+      cons.appendChild(cardEl(c.card, { uid: c.uid, cls: 'mini' + (t ? ' target' : '') + (can ? ' can' : '') + (selected && selected.uid === c.uid ? ' sel' : ''), power: En.constructPower(G, c),
+        onclick: () => { if (mode && mode.kind === 'attack' && !isMe) return doAttack({ kind: 'construct', uid: c.uid }); select('construct', c); } }));
+    });
+
+    // Land Magic Zone (one shared Land; it sits on the mat of whoever placed it)
+    const [landZ, land] = zoneBox('land', 'Land Magic', G.land && G.land.owner === p ? 'ใช้ได้ทั้งสองฝ่าย' : '');
+    if (G.land && G.land.owner === p) {
+      const can = myTurn('main') && En.activatables(G, ME).some(x => x.kind === 'land');
+      land.appendChild(cardEl(G.land.card, { uid: G.land.uid, cls: 'mini' + (can ? ' can' : '') + (selected && selected.uid === G.land.uid ? ' sel' : ''), onclick: () => select('land', G.land) }));
+    }
+
+    // LIFE
+    const [lifeZ, lifebox] = zoneBox('life', 'Life', `${5 - up}/5`);
+    lifeZ.classList.add('lifebox'); lifeZ.dataset.p = p;
+    const lifeTarget = targets.some(t => t.kind === 'life');
+    if (lifeTarget) { lifeZ.classList.add('target'); lifeZ.onclick = () => doAttack({ kind: 'life' }); }
+    pl.life.forEach(l => {
+      const d = document.createElement('div'); d.className = 'life' + (l.faceUp ? ' up' : '');
+      d.title = l.faceUp ? l.card.name + ': ' + l.card.text : 'LIFE Card (คว่ำ)';
+      if (l.faceUp) { d.textContent = l.card.name; d.onclick = e => { if (lifeTarget) return; e.stopPropagation(); select('life', l); }; }
+      lifebox.appendChild(d);
+    });
+
+    // Avatar Zone
+    const avMax = Math.max(En.avatarLimit(G, p), pl.avatars.length);
+    const [avZ, av] = zoneBox('av', 'Avatar Zone', `สูงสุด ${avMax} ใบ`);
+    av.classList.add('avzone');
+    for (let i = 0; i < avMax; i++) {
       const a = pl.avatars[i];
       if (!a) { const s = document.createElement('div'); s.className = 'slot'; av.appendChild(s); continue; }
       const eqs = En.attachedTo(G, a);
@@ -245,25 +427,37 @@
       if (isMe && mode && mode.kind === 'attack' && mode.uid === a.uid) cls += ' sel';
       if (isMe && myTurn('battle') && !mode && !a.rested && En.attackTargets(G, ME, a.uid).length) cls += ' can';
       if (isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === a.uid)) cls += ' can';
-      av.appendChild(cardEl(a.card, { cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
+      av.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
     }
-    pl.constructs.forEach(c => sub.appendChild(chip('🏛 ' + c.card.name + ' (P' + c.card.power + ')', () => { if (mode && mode.kind === 'attack' && !isMe) return doAttack({ kind: 'construct', uid: c.uid }); select('construct', c); }, targets.some(t => t.kind === 'construct' && t.uid === c.uid))));
-    pl.magicZone.forEach(m => { const host = En.findAvatar(G, m.attachedTo); sub.appendChild(chip('🔧 ' + m.card.name + (host ? ' → ' + host.card.name : ''), () => select('magic', m))); });
-    if (isMe) { zones.appendChild(av); zones.appendChild(sub); } else { zones.appendChild(sub); zones.appendChild(av); }
 
-    const lifebox = document.createElement('div'); lifebox.className = 'lifebox';
-    const lifeTarget = targets.some(t => t.kind === 'life');
-    if (lifeTarget) { lifebox.classList.add('target'); lifebox.onclick = () => doAttack({ kind: 'life' }); }
-    lifebox.innerHTML = `<div class="lbl">LIFE ${5 - up}/5</div>`;
-    const ls = document.createElement('div'); ls.className = 'lifes';
-    pl.life.forEach(l => {
-      const d = document.createElement('div'); d.className = 'life' + (l.faceUp ? ' up' : '');
-      d.title = l.faceUp ? l.card.name + ': ' + l.card.text : 'LIFE Card (คว่ำ)';
-      if (l.faceUp) d.onclick = e => { if (lifeTarget) return; e.stopPropagation(); select('life', l); };
-      ls.appendChild(d);
+    // Magic Zone (Modification cards worn by avatars)
+    const [magZ, mag] = zoneBox('magic', 'Magic Zone', 'Magic ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น');
+    pl.magicZone.forEach(m => {
+      const host = En.findAvatar(G, m.attachedTo);
+      const w = document.createElement('div'); w.className = 'mwrap';
+      const can = isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
+      w.appendChild(cardEl(m.card, { uid: m.uid, cls: 'mini' + (can ? ' can' : '') + (selected && selected.uid === m.uid ? ' sel' : ''), onclick: () => select('magic', m) }));
+      if (host) { const t = document.createElement('div'); t.className = 'host'; t.textContent = '→ ' + host.card.name; w.appendChild(t); }
+      mag.appendChild(w);
     });
-    lifebox.appendChild(ls);
-    root.appendChild(info); root.appendChild(zones); root.appendChild(lifebox);
+
+    // Hell (top card face up) and Deck (card back)
+    const [hellZ, hell] = zoneBox('hell', 'Hell', `นรก ${pl.hell.length}`);
+    const top = pl.hell[pl.hell.length - 1];
+    if (top) hell.appendChild(cardEl(top.card, { cls: 'mini', onclick: () => viewZone(p, 'hell') }));
+    hellZ.onclick = () => viewZone(p, 'hell'); hellZ.classList.add('click');
+    // abilities usable from hell (ลุงไนท์, ดาบศักดิ์สิทธิ์ อาลอนไดร์ท ...)
+    const hellActs = isMe && myTurn('main') ? En.activatables(G, ME).filter(x => x.kind === 'hell') : [];
+    if (hellActs.length) hell.appendChild(chip(`สั่งใช้จากนรก (${hellActs.length})`, async () => {
+      const v = await humanAsk({ title: 'สั่งใช้ความสามารถจากนรก', optional: true, options: hellActs.map(x => { const h = pl.hell.find(c => c.uid === x.uid); return { label: `${h.card.name}: ${x.label}`, card: h.card, value: x.uid }; }) });
+      if (v != null) act(() => En.activate(G, ME, v));
+    }, true));
+    const [deckZ, deck] = zoneBox('deck', 'Deck', `กองจั่ว ${pl.deck.length}`);
+    // ฮามดัล: while it is on the field the top card of both decks is face up
+    const reveal = G.players.some(x => x.avatars.some(a => (FX(a.card.id) || {}).revealTop && !a.lostAbilities));
+    if (pl.deck.length) { const b = cardEl(reveal ? pl.deck[0].card : null, { cls: 'mini' }); b.dataset.n = pl.deck.length; if (reveal) b.title = 'การ์ดบนสุดของ Deck (หงายด้วยฮามดัล)'; deck.appendChild(b); }
+
+    [consZ, landZ, infoZ, lifeZ, avZ, magZ, hellZ, deckZ].forEach(z => root.appendChild(z));
   }
 
   function chip(text, onclick, target) {
@@ -298,12 +492,6 @@
     t.textContent = G.winner != null ? 'จบเกม' : `เทิร์น ${G.turn} · ${G.active === ME ? 'ตาคุณ' : 'ตาบอท'}`;
     pb.appendChild(t);
     ['draw', 'main', 'battle', 'end'].forEach(ph => { const s = document.createElement('span'); s.className = 'ph' + (G.phase === ph ? ' on' : ''); s.textContent = En.PHASE_TH[ph].replace(' Phase', ''); pb.appendChild(s); });
-    const lz = $('#landZone'); lz.innerHTML = '<div>Land Magic</div>';
-    if (G.land) {
-      const can = myTurn('main') && En.activatables(G, ME).some(x => x.kind === 'land');
-      lz.appendChild(cardEl(G.land.card, { cls: can ? 'can' : '', onclick: () => select('land', G.land) }));
-      const o = document.createElement('div'); o.textContent = (G.land.owner === ME ? 'คุณวางไว้' : 'บอทวางไว้') + ' · ใช้ได้ทั้งสองฝ่าย'; lz.appendChild(o);
-    } else { const s = document.createElement('div'); s.className = 'slot'; s.style.cssText = '--cw:58px;width:58px;height:79px'; lz.appendChild(s); }
     $('#battleBtn').disabled = !myTurn('main') || G.turn === 1 || !!mode;
     $('#battleBtn').title = G.turn === 1 ? 'ผู้เล่นที่เริ่มก่อนเข้า Battle Phase ในเทิร์นแรกไม่ได้' : '';
     $('#endBtn').disabled = !(myTurn('main') || myTurn('battle')) || !!mode;
@@ -364,7 +552,7 @@
       if (c.type === 'magic') { const r = En.canCast(G, ME, idx); add('ใช้ Magic', () => act(() => En.cast(G, ME, G.players[ME].hand.indexOf(inst))), true, !r.ok); if (!r.ok) note(btns, r.error); }
       En.activatables(G, ME).filter(x => x.kind === 'hand' && x.uid === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid))));
     }
-    if ((selected.zone === 'land' || (selected.zone === 'avatar' && inst.owner === ME)) && myTurn()) {
+    if ((selected.zone === 'land' || (['avatar', 'construct', 'magic'].includes(selected.zone) && inst.owner === ME)) && myTurn()) {
       En.activatables(G, ME).filter(x => x.uid === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid)), true));
       if (selected.zone === 'avatar' && G.phase === 'battle' && !inst.rested && En.attackTargets(G, ME, inst.uid).length) add('โจมตี', () => { mode = { kind: 'attack', uid: inst.uid }; render(); }, true);
     }
@@ -396,8 +584,9 @@
   function beginPay(inst) {
     const pl = G.players[ME];
     const idx = pl.hand.indexOf(inst);
-    if ((inst.card.cost || 0) === 0) return act(() => inst.card.type === 'construct' ? En.build(G, ME, idx, []) : En.summon(G, ME, idx, []));
-    const sug = En.findPayment(pl, idx) || [];
+    const ctx = En.payCtx(G, ME, inst.card);
+    if (ctx.cost === 0) return act(() => inst.card.type === 'construct' ? En.build(G, ME, idx, []) : En.summon(G, ME, idx, []));
+    const sug = En.findPayment(pl, idx, null, ctx) || [];
     mode = { kind: 'pay', uid: inst.uid, sel: new Set(sug.map(i => pl.hand[i].uid)) };
     selected = { zone: 'hand', uid: inst.uid };
     render();
@@ -408,7 +597,7 @@
     const inst = findHand(mode.uid);
     const idx = pl.hand.indexOf(inst);
     const pay = [...mode.sel].map(u => pl.hand.findIndex(h => h.uid === u));
-    const r = En.checkPayment(inst.card, pay.map(i => pl.hand[i].card));
+    const r = En.checkPayment(inst.card, pay.map(i => pl.hand[i].card), En.payCtx(G, ME, inst.card));
     if (!r.ok) return toast(r.error);
     selected = null;
     act(() => inst.card.type === 'construct' ? En.build(G, ME, idx, pay) : En.summon(G, ME, idx, pay));

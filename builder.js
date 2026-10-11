@@ -140,7 +140,7 @@
     $('#bPoolCount').textContent = `${list.length} ใบ`;
     list.forEach(c => {
       const w = document.createElement('div'); w.className = 'pcard';
-      const el = UI().cardEl(c, { onclick: () => { preview = c; add(c); } });
+      const el = UI().cardEl(c, { lazy: true, onclick: () => { preview = c; add(c); } });
       el.addEventListener('mouseenter', () => { preview = c; renderPreview(); });
       const b = document.createElement('div'); b.className = 'incount hidden';
       w.append(el, b);

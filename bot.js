@@ -85,9 +85,10 @@
 
     // 3b) build Constructs we can pay for
     for (let guard = 0; guard < 3 && alive(); guard++) {
-      const i = pl.hand.findIndex((h, k) => h.card.type === 'construct' && En.findPayment(pl, k) && En.canBuild(state, p, k, En.findPayment(pl, k)).ok);
+      const payFor = k => En.findPayment(pl, k, null, En.payCtx(state, p, pl.hand[k].card));
+      const i = pl.hand.findIndex((h, k) => h.card.type === 'construct' && payFor(k) && En.canBuild(state, p, k, payFor(k)).ok);
       if (i < 0) break;
-      const r = await En.build(state, p, i, En.findPayment(pl, i));
+      const r = await En.build(state, p, i, payFor(i));
       if (!r.ok) break;
       await wait();
     }
@@ -116,6 +117,7 @@
 
   function wantMagic(state, p, card) {
     const o = state.players[1 - p];
+    if (card.id === 'BT01-037') return state.players[p].hand.length <= 4; // เพื่อลูกค้า: only when the hand is low
     if (card.id.endsWith('-014')) return state.players[p].avatars.some(a => !a.rested) && o.avatars.length > 0 && state.turn > 1; // ความกล้าหาญ
     return true;
   }
@@ -140,7 +142,7 @@
     if (win) return win.t;
     const trade = kills.filter(k => k.dp === my && ((k.d.card.cost || 0) >= (a.card.cost || 0))).sort((x, y) => (y.d.card.cost || 0) - (x.d.card.cost || 0))[0];
     if (trade && my > 0) return trade.t;
-    const cs = ts.find(t => t.kind === 'construct' && my > ((o.constructs.find(c => c.uid === t.uid) || {}).card || {}).power);
+    const cs = ts.find(t => t.kind === 'construct' && o.constructs.some(c => c.uid === t.uid && my > En.constructPower(state, c)));
     if (cs) return cs;
     return null;
   }

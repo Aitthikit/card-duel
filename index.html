@@ -20,6 +20,7 @@
         <label>Deck ของบอท <select id="botDeck"></select><span id="botInfo" class="dinfo"></span></label>
         <label>เริ่มก่อน <select id="firstSel"><option value="rand">สุ่ม (เป่ายิงฉุบ)</option><option value="0">คุณ</option><option value="1">บอท</option></select></label>
         <label>ความเร็วบอท <select id="speedSel"><option value="900">ช้า</option><option value="550" selected>ปกติ</option><option value="200">เร็ว</option></select></label>
+        <label class="wide">ลาย Playmat <select id="matSel"></select><input type="file" id="matFile" accept="image/*" class="hidden"></label>
       </div>
       <div class="deckbtns">
         <button id="newDeckBtn">+ จัด Deck ใหม่</button>
@@ -69,7 +70,6 @@
       <div class="side opp" id="oppSide"></div>
       <div class="midbar">
         <div id="phaseBar" class="phasebar"></div>
-        <div id="landZone" class="landzone"></div>
         <div class="actions">
           <button id="battleBtn">⚔️ Battle Phase</button>
           <button id="endBtn">จบเทิร์น ▶</button>
@@ -82,7 +82,7 @@
     <aside class="panel">
       <div id="detail" class="detail"><div class="placeholder">แตะการ์ดเพื่อดูรายละเอียด</div></div>
       <div class="logwrap"><div class="logtitle">บันทึกการดวล</div><div id="log" class="log"></div></div>
-      <button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button>
+      <div class="panelbtns"><label class="matpick">Playmat <select id="matSel2" aria-label="ลาย Playmat"></select></label><button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button></div>
     </aside>
   </section>
 
