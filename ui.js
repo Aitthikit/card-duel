@@ -426,7 +426,8 @@
       if (targets.some(t => t.kind === 'avatar' && t.uid === a.uid)) cls += ' target';
       if (isMe && mode && mode.kind === 'attack' && mode.uid === a.uid) cls += ' sel';
       if (isMe && myTurn('battle') && !mode && !a.rested && En.attackTargets(G, ME, a.uid).length) cls += ' can';
-      if (isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === a.uid)) cls += ' can';
+      if (isMe && myTurn('main') && !mode && En.activatables(G, ME).some(x => x.uid === a.uid || x.src === a.uid)) cls += ' can';
+      if (a.linked) cls += ' linked';
       av.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
     }
 
@@ -447,9 +448,9 @@
     if (top) hell.appendChild(cardEl(top.card, { cls: 'mini', onclick: () => viewZone(p, 'hell') }));
     hellZ.onclick = () => viewZone(p, 'hell'); hellZ.classList.add('click');
     // abilities usable from hell (ลุงไนท์, ดาบศักดิ์สิทธิ์ อาลอนไดร์ท ...)
-    const hellActs = isMe && myTurn('main') ? En.activatables(G, ME).filter(x => x.kind === 'hell') : [];
-    if (hellActs.length) hell.appendChild(chip(`สั่งใช้จากนรก (${hellActs.length})`, async () => {
-      const v = await humanAsk({ title: 'สั่งใช้ความสามารถจากนรก', optional: true, options: hellActs.map(x => { const h = pl.hell.find(c => c.uid === x.uid); return { label: `${h.card.name}: ${x.label}`, card: h.card, value: x.uid }; }) });
+    const hellActs = isMe && myTurn('main') ? En.activatables(G, ME).filter(x => x.kind === 'hell' || x.kind === 'dark') : [];
+    if (hellActs.length) hell.appendChild(chip(`สั่งใช้จากนรก/มิติมืด (${hellActs.length})`, async () => {
+      const v = await humanAsk({ title: 'สั่งใช้ความสามารถจากนรก / มิติมืด', optional: true, options: hellActs.map(x => { const h = pl.hell.concat(pl.dark).find(c => c.uid === x.uid); return { label: `${h.card.name}${x.kind === 'dark' ? ' (มิติมืด)' : ''}: ${x.label}`, card: h.card, value: x.uid }; }) });
       if (v != null) act(() => En.activate(G, ME, v));
     }, true));
     const [deckZ, deck] = zoneBox('deck', 'Deck', `กองจั่ว ${pl.deck.length}`);
@@ -553,7 +554,7 @@
       En.activatables(G, ME).filter(x => x.kind === 'hand' && x.uid === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid))));
     }
     if ((selected.zone === 'land' || (['avatar', 'construct', 'magic'].includes(selected.zone) && inst.owner === ME)) && myTurn()) {
-      En.activatables(G, ME).filter(x => x.uid === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid)), true));
+      En.activatables(G, ME).filter(x => x.uid === inst.uid || x.src === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid)), true));
       if (selected.zone === 'avatar' && G.phase === 'battle' && !inst.rested && En.attackTargets(G, ME, inst.uid).length) add('โจมตี', () => { mode = { kind: 'attack', uid: inst.uid }; render(); }, true);
     }
   }

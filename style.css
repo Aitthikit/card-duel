@@ -68,6 +68,8 @@ select { width: 100%; max-width: 100%; background: #141b3d; color: var(--text); 
 .card.rested { transform: rotate(90deg) scale(.85); }
 .card.sel { box-shadow: 0 0 0 3px var(--gold), 0 0 18px var(--gold); }
 .card.can { box-shadow: 0 0 0 2px var(--green), 0 0 12px rgba(61,220,132,.7); }
+.card.linked { outline: 2px dashed #f5c542; outline-offset: 2px; }
+.card.linked::before { content: "🔗"; position: absolute; top: -8px; left: -6px; font-size: 14px; z-index: 3; filter: drop-shadow(0 0 2px #000); }
 .card.target { box-shadow: 0 0 0 3px var(--red), 0 0 16px var(--red); animation: pulse 1s infinite; }
 .card.dim { filter: grayscale(.7) brightness(.55); }
 .card.back { background: linear-gradient(135deg, #5a3cc0, #22165e); border: 2px solid rgba(255,255,255,.25); }
