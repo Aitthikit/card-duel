@@ -12,6 +12,7 @@
   let selected = null;     // {zone, uid}
   let busy = false;
   let botSpeed = 550;
+  let botLevel = 'normal';
   let imgBase = '../refs/';
   let lastSetup = null;
   let focusNow = null;     // react prompt: {from, to} cards highlighted on the board
@@ -152,7 +153,7 @@
   function initStart() {
     initMats();
     fillDeckSelects();
-    try { const saved = JSON.parse(localStorage.getItem('tc-duel-prefs') || '{}'); if (saved.my && Decks.get(saved.my)) $('#myDeck').value = saved.my; if (saved.bot && (saved.bot === 'rand' || Decks.get(saved.bot))) $('#botDeck').value = saved.bot; if (saved.speed) $('#speedSel').value = saved.speed; } catch (e) { /* storage unavailable */ }
+    try { const saved = JSON.parse(localStorage.getItem('tc-duel-prefs') || '{}'); if (saved.my && Decks.get(saved.my)) $('#myDeck').value = saved.my; if (saved.bot && (saved.bot === 'rand' || Decks.get(saved.bot))) $('#botDeck').value = saved.bot; if (saved.speed) $('#speedSel').value = saved.speed; if (saved.level && Bot.LEVELS[saved.level]) $('#levelSel').value = saved.level; } catch (e) { /* storage unavailable */ }
     renderDeckInfo();
     $('#myDeck').onchange = renderDeckInfo; $('#botDeck').onchange = renderDeckInfo;
     $('#startBtn').onclick = () => {
@@ -164,7 +165,8 @@
       for (const [who, d] of [['ของคุณ', dm], ['ของบอท', db]]) { const v = Decks.validate(d); if (!v.ok) return toast(`Deck ${who} ยังเล่นไม่ได้: ${v.problems[0]}`); }
       const first = $('#firstSel').value;
       botSpeed = +$('#speedSel').value;
-      try { localStorage.setItem('tc-duel-prefs', JSON.stringify({ my, bot: $('#botDeck').value, speed: $('#speedSel').value })); } catch (e) { /* ignore */ }
+      botLevel = $('#levelSel').value;
+      try { localStorage.setItem('tc-duel-prefs', JSON.stringify({ my, bot: $('#botDeck').value, speed: $('#speedSel').value, level: $('#levelSel').value })); } catch (e) { /* ignore */ }
       startGame({ my, bot, first: first === 'rand' ? null : +first });
     };
     $('#newDeckBtn').onclick = () => window.TCBuilder.open(null, onBuilderDone);
@@ -223,7 +225,7 @@
       first: setup.first,
       players: [
         { name: 'คุณ', deckName: dmy.name, deck: d1.deck, life: d1.life },
-        { name: 'บอท', deckName: dbot.name, isBot: true, deck: d2.deck, life: d2.life },
+        { name: `บอท (${Bot.LEVELS[botLevel]})`, deckName: dbot.name, isBot: true, deck: d2.deck, life: d2.life },
       ],
       ask: (p, req) => (p === BOT ? Promise.resolve(Bot.botAsk(req)) : humanAsk(req)),
       onChange: () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); },
@@ -372,7 +374,7 @@
     if (!G || busy || G.winner != null) { if (G && G.winner != null) showGameOver(); return; }
     if (G.active !== BOT || G.phase === 'mulligan') return;
     busy = true; render();
-    try { await Bot.playTurn(G, BOT, botSpeed); } catch (e) { console.error(e); toast('บอทเกิดข้อผิดพลาด: ' + e.message); if (G.active === BOT && G.winner == null) await En.endTurn(G, BOT); }
+    try { await Bot.playTurn(G, BOT, botSpeed, null, botLevel); } catch (e) { console.error(e); toast('บอทเกิดข้อผิดพลาด: ' + e.message); if (G.active === BOT && G.winner == null) await En.endTurn(G, BOT); }
     busy = false; render();
     if (G.winner != null) showGameOver();
   }

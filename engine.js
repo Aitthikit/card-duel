@@ -57,6 +57,7 @@
   // ---------- setup ----------
   // opts: { seed, first, players:[{name,isBot,deck:[card],life:[card]}], ask(p, req) -> Promise }
   function createGame(opts) {
+    uidSeq = 1; // same uids on both PCs in an online game, whatever was played before
     const state = {
       seed: (opts.seed >>> 0) || ((Math.random() * 1e9) >>> 0),
       players: [], turn: 0, active: 0, first: 0, phase: 'mulligan',
@@ -253,6 +254,7 @@
     return ok();
   }
 
+  const cardValueBase = c => cardValue(c);
   function cardValue(card) {
     if (card.type === 'avatar') return (card.power || 0) * 2 + (FX(card.id) ? 2 : 1);
     if (card.type === 'construct') return 3;
@@ -299,7 +301,9 @@
   }
 
   // Cheapest legal payment from hand (excluding handIdx). Returns hand indices or null.
-  function findPayment(pl, handIdx, card, ctx) {
+  // valueOf(card): how much the player wants to keep a card (cheapest set is paid); the bot passes its own
+  function findPayment(pl, handIdx, card, ctx, valueOf) {
+    const cardValue = valueOf || cardValueBase;
     card = card || pl.hand[handIdx].card;
     const cost = ctx ? ctx.cost : (card.cost || 0);
     const gemTotal = ctx ? ctx.gem : gemTotalBase;
