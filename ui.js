@@ -957,4 +957,5 @@
   // expose for automated testing
   window.TCUI = { get game() { return G; }, get online() { return net; }, startGame, humanAsk, cardEl, artEl, toast, esc, get imgBase() { return imgBase; } };
   initStart();
+  if (window.TCI18N) window.TCI18N.onChange(() => { renderDeckInfo(); if (G) render(); });
 })();

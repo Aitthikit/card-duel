@@ -1,91 +1,98 @@
 # Battle of Talingchan — Card Duel
 
-เกมการ์ด Battle of Talingchan เล่นบนเว็บ ดวลกับบอทได้ 4 ระดับ หรือดวลกับเพื่อนแบบออนไลน์คนละเครื่อง
-กฎตาม Rule Book ver. 3.2 ข้อมูลการ์ดจาก [bottcg.com](https://bottcg.com)
+**English** · [ภาษาไทย](README.th.md)
 
-**เล่นได้เลยที่ https://aitthikit.github.io/card-duel/**
+A web version of the Battle of Talingchan trading card game. Duel a bot at four difficulty levels, or play a friend online on two devices.
+Rules follow Rule Book ver. 3.2. Card data comes from [bottcg.com](https://bottcg.com).
 
-## เริ่มเล่น
+**Play now: https://aitthikit.github.io/card-duel/**
 
-1. เลือก **Deck ของคุณ** และ **Deck ของบอท** (Starter Deck KD01–KD04 หรือ Deck ที่จัดเอง)
-2. เลือก **ระดับบอท** แล้วกด **เริ่มดวล**
-3. ช่วงแรกเลือกการ์ดบนมือที่อยากเปลี่ยน (หรือเก็บไว้ทั้งหมด)
+## Getting started
 
-ถ้าเว็บยังแสดงเวอร์ชันเก่าหลังมีอัปเดต กด `Ctrl + F5` หนึ่งครั้ง
+1. Switch the **ภาษา / Language** box (top right of the start screen) to **English**.
+2. Pick **Your Deck** and the **Bot's Deck** (Starter Decks KD01–KD04, or a Deck you built).
+3. Pick the **Bot level** and press **Start duel**.
+4. At the start, choose any cards in hand you want to replace (or keep them all).
 
-### ระดับบอท
+English mode translates the buttons, game messages and card effect text. Card art, card names and Symbols stay in Thai, as printed on the real cards, so you can match them to the pictures. A few rarer game messages are still in Thai.
 
-| ระดับ | เล่นอย่างไร |
+If the site still shows an old version after an update, press `Ctrl + F5` once.
+
+### Bot levels
+
+| Level | How it plays |
 |---|---|
-| ง่าย | บอทรุ่นแรก ลงการ์ดตรงๆ และมักเอา Magic ไปจ่ายเป็น GEM |
-| ปกติ | เก็บ React Magic และ Magic ที่ใช้ได้ไว้บนมือ จ่าย GEM ด้วยการ์ดที่สำคัญน้อยที่สุด และไม่อัญเชิญถ้าต้องทิ้งการ์ดดีเยอะเกินไป |
-| ยาก | ก่อนทำแต่ละอย่าง (อัญเชิญ, ใช้ Magic, โจมตีเป้าไหน, หยุด) จะลองเล่นทุกทางบนสำเนาเกม แล้วเลือกทางที่กระดานดีที่สุด ไม่รู้การ์ดบนมือของคุณ |
-| God | คิดแบบเดียวกับยาก แต่เห็นการ์ดบนมือคุณและลำดับการ์ดใน Deck และคิดไปถึงเทิร์นถัดไปของคุณด้วย |
+| Easy | The original bot. Plays cards straight away and often spends Magic as GEM |
+| Normal | Keeps React Magic and useful Magic in hand, pays GEM with the cards it needs least, and won't summon if it has to throw away too many good cards |
+| Hard | Before each move (summon, Magic, which target to attack, or stop) it tries every option on a copy of the game and picks the one that leaves the best board. It does not know your hand |
+| God | Thinks like Hard, but cheats: it sees your hand and its Deck order, and also plays out your next turn |
 
-ผลจากให้บอทแข่งกันเอง 192 เกมต่อคู่: ปกติชนะง่าย 55%, ยากชนะปกติ 70%, God ชนะยาก 64%
+From bot-vs-bot games (192 games per pairing): Normal beats Easy 55% of the time, Hard beats Normal 70%, God beats Hard 64%.
 
-### วิธีเล่นแบบย่อ
+### Quick rules
 
-- **อัญเชิญ**: กดการ์ด Avatar บนมือ แล้วเลือกการ์ดบนมือที่จะทิ้งลงนรกเป็น GEM ให้ครบ Cost (สี GEM ต้องตรงกับสีการ์ด, GEM ไร้สีใช้ได้ทุกสี, ห้ามจ่ายเกิน)
-- **Magic**: ไม่มี Cost แต่ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น (Normal / Modification / React / Land)
-- **React Magic**: เกมจะถามเองเมื่อเงื่อนไขเกิดขึ้น หน้าต่างถามจะแสดงการ์ดที่โจมตีหรือทำให้เกิดเหตุการณ์ และการ์ดที่โดนเล็ง (หรือ LIFE) พร้อมไฮไลต์บนกระดาน
-- **โจมตี**: เข้า Battle Phase แล้วกด Avatar ของเรา จากนั้นเลือกเป้าหมาย POWER มากกว่าชนะ เท่ากันตายคู่
-- โจมตี LIFE ได้เมื่ออีกฝ่ายไม่มี Avatar (หรือมี "เตะไข่") หงายครบ 5 ใบเป็นสถานะ "สาหัส" โดนอีกครั้งแพ้
-- การ์ดใน Deck หมดแพ้ทันที
+- **Summon**: tap an Avatar in your hand, then choose cards in hand to send to Hell as GEM until the Cost is paid. GEM color must match the card, Colorless GEM pays any color, and you can't overpay.
+- **Magic**: no Cost, but you can use one of each type per turn (Normal / Modification / React / Land).
+- **React Magic**: the game asks you when its condition happens. The prompt shows the card that caused it and the card (or LIFE) being targeted, and highlights both on the board.
+- **Attack**: go to the Battle Phase, tap your Avatar, then choose a target. Higher POWER wins; a tie destroys both.
+- You can attack LIFE when the opponent has no Avatar (or with "Egg Kick"), one card per attack. With all 5 LIFE Cards face up a player is **Critical**, and one more hit loses.
+- Running out of cards in the Deck loses immediately.
 
-## เล่นออนไลน์กับเพื่อน
+## Play online with a friend
 
-1. ทั้งสองคนเปิดเว็บ เลือก **Deck ของคุณ** แล้วเปิดหัวข้อ **เล่นออนไลน์กับเพื่อน**
-2. คนหนึ่งกด **สร้างห้อง** แล้วส่งรหัส 5 ตัวให้เพื่อน
-3. อีกคนใส่รหัสแล้วกด **เข้าห้อง** เกมจะเริ่มเอง
+1. Both players open the site, pick **Your Deck**, and open **Play online with a friend**.
+2. One player presses **Create room** and sends the 5-letter code to the other.
+3. The other player types the code and presses **Join**. The game starts by itself.
 
-- คำถามในเกม (เลือกเป้าหมาย, ทิ้งการ์ด, จะตอบโต้ไหม) ขึ้นที่เครื่องของคนที่ต้องตอบ อีกเครื่องจะขึ้นว่า "รอ … ตัดสินใจ"
-- มือของอีกฝ่ายเห็นเป็นหลังการ์ด ส่วน Deck เห็นแค่จำนวนใบ
-- ใช้ [PeerJS](https://peerjs.com) ต่อสองเครื่องเข้าหากันโดยตรง ไม่ต้องมีเซิร์ฟเวอร์ของตัวเอง
-- ข้อจำกัดของเวอร์ชันนี้: ถ้าเน็ตหลุดกลางเกมจะกลับเข้าเกมเดิมไม่ได้ และไม่มีระบบกันโกง
+- Game questions (choose a target, discard, React or not) pop up on the device of the player who must answer. The other device shows "Waiting for … to decide".
+- You only see the backs of your opponent's hand, and only the number of cards in their Deck.
+- The two browsers connect directly with [PeerJS](https://peerjs.com); there is no game server.
+- Limits of this version: if the connection drops mid-game, that game can't be resumed, and there is no anti-cheat.
 
-## จัด Deck
+## Deck building
 
-- **+ จัด Deck ใหม่**: เลือกจากการ์ด 1,514 ใบทุกชุด (ไม่รวมการ์ด ลำเอียง) กรองตามชุด / ประเภท / สี / ค้นหาได้ ปุ่ม "เติมให้ครบ" ช่วยเติมให้ครบ 50 + LIFE 5
-- **แก้ไข Deck**: แก้ Starter แล้วจะบันทึกเป็น Deck ใหม่ ส่วน Deck ที่บันทึกไว้จะถูกแก้ทับ
-- **นำเข้า / ส่งออก**: คัดลอกข้อความ Deck ไปเก็บหรือส่งให้เพื่อน แล้ววางกลับเพื่อนำเข้า
-- Deck ที่บันทึกไว้อยู่ในเบราว์เซอร์เครื่องนั้น ล้างข้อมูลเบราว์เซอร์แล้วจะหาย ควรส่งออกเก็บไว้
-- กฎ Deck: Main 50 ใบพอดี, Only #1 1 ใบ, ชื่อเดียวกันไม่เกิน 4 ใบ (หรือตามที่การ์ดกำหนด), LIFE 5 ใบชื่อไม่ซ้ำ
+- **+ New Deck**: choose from all 1,514 cards in every set (ลำเอียง cards are left out). Filter by set, type, color or search. **Auto-fill** completes the Deck to 50 + 5 LIFE.
+- **Edit Deck**: editing a Starter Deck saves it as a new Deck; a saved Deck is updated in place.
+- **Import / Export**: copy a Deck as text to keep it or send it to a friend, then paste it back to import.
+- Saved Decks live in that browser only. Clearing browser data deletes them, so export the ones you want to keep.
+- Deck rules: exactly 50 Main cards, exactly one Only #1 card, at most 4 cards of the same name (or the card's own limit), and 5 LIFE cards with different names.
 
-## การ์ดที่รองรับ
+## Supported cards
 
-- เอฟเฟกต์ทำไว้แล้วสำหรับชุด KD01–KD04, BT01–BT11, CC01–CC02, SD01–SD09 และการ์ดโปรโม (PRMO, ODY1, PRE0, SL) ส่วนใหญ่ การ์ดพิมพ์ซ้ำที่ข้อความเหมือนเดิมใช้ความสามารถของใบเดิม
-- การ์ดชุดอื่นเล่นได้ตามกฎหลัก (POWER, Cost, GEM, คีย์เวิร์ด) แต่ข้อความความสามารถอื่นยังไม่ทำงาน
-- การ์ดที่มีเวอร์ชัน SCR (Secret Rare) จะแสดงรูป SCR
+- Card effects are implemented for most of KD01–KD04, BT01–BT11, CC01–CC02, SD01–SD09 and the promo cards (PRMO, ODY1, PRE0, SL). Reprints with the same text use the original card's ability.
+- Cards from other sets play by the core rules (POWER, Cost, GEM, keywords), but their other ability text doesn't work yet.
+- Cards with an SCR (Secret Rare) version show the SCR art.
+- The English effect text is a translation for reading only; the game plays by the Thai card text.
 
-### เจอการ์ดที่เอฟเฟกต์ไม่ถูกต้อง?
+### Found a card whose effect is wrong?
 
-ยังมีการ์ดบางใบที่เอฟเฟกต์ทำงานไม่ถูกต้องหรือยังไม่ทำงาน ถ้าเจอ แจ้งได้ที่ [GitHub Issues](https://github.com/Aitthikit/card-duel/issues) หรือบอกเจ้าของเว็บโดยตรง ช่วยบอกข้อมูลนี้มาด้วย
+Some cards still don't work correctly or don't work yet. If you find one, please report it on [GitHub Issues](https://github.com/Aitthikit/card-duel/issues) or tell the site owner directly. Please include:
 
-- รหัสการ์ด เช่น `BT08-065`
-- เกิดอะไรขึ้นในเกม
-- ตามการ์ดจริงควรเกิดอะไรขึ้น
+- the card code, e.g. `BT08-065`
+- what happened in the game
+- what should happen according to the real card
 
-## ไฟล์
+## Files
 
-| ไฟล์ | หน้าที่ |
+| File | What it does |
 |---|---|
-| `index.html`, `style.css`, `ui.js` | หน้าจอเกม กระดาน และหน้าต่างถามผู้เล่น |
-| `engine.js` | กฎเกม ตาม Rule Book ver. 3.2 |
-| `effects.js` | เอฟเฟกต์ของการ์ดแต่ละใบ |
-| `cards.js` | ข้อมูลการ์ด 1,514 ใบ (จาก bottcg.com) |
-| `bot.js` | Starter Deck และบอททั้ง 4 ระดับ |
-| `net.js` | การต่อออนไลน์ด้วยรหัสห้อง (PeerJS) |
-| `decks.js`, `builder.js` | รายการ Deck, ตรวจกฎ Deck และหน้าจัด Deck |
-| `refs/` | รูปการ์ด |
-| `backs/`, `mats/` | รูปหลังการ์ดและลาย Playmat |
+| `index.html`, `style.css`, `ui.js` | Game screen, board and player prompts |
+| `engine.js` | Game rules (Rule Book ver. 3.2) |
+| `effects.js` | Each card's effect |
+| `cards.js` | Data for 1,514 cards (from bottcg.com) |
+| `cards_en.js`, `i18n.js` | English card effect text and the Thai / English switch |
+| `bot.js` | Starter Decks and the four bot levels |
+| `net.js` | Online play with room codes (PeerJS) |
+| `decks.js`, `builder.js` | Deck list, Deck rules and the Deck builder |
+| `refs/` | Card images |
+| `backs/`, `mats/` | Card backs and playmats |
 
-## เปิดในเครื่องตัวเอง
+## Run it locally
 
-เกมเป็นไฟล์ HTML/JavaScript ล้วน ไม่ต้องติดตั้งอะไร เปิดผ่านเว็บเซิร์ฟเวอร์เล็กๆ ในโฟลเดอร์นี้ เช่น
+The game is plain HTML and JavaScript with nothing to install. Serve this folder with any small web server, for example:
 
 ```sh
 python3 -m http.server 8000
 ```
 
-แล้วเปิด http://localhost:8000 ทดสอบโหมดออนไลน์โดยไม่ใช้อินเทอร์เน็ตได้ด้วย `http://localhost:8000/?loop` แล้วเปิดสองแท็บในเบราว์เซอร์เดียวกัน
+Then open http://localhost:8000. To try online play without the internet, open `http://localhost:8000/?loop` in two tabs of the same browser.

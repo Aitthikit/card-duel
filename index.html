@@ -6,13 +6,14 @@
 <title>Talingchan Duel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261012c">
+<link rel="stylesheet" href="style.css?v=20261012d">
 </head>
 <body>
 <div id="app">
   <!-- start screen -->
   <section id="start" class="screen">
     <div class="start-box">
+      <div class="langrow"><label>ภาษา <select class="langsel" aria-label="Language"><option value="th">ไทย</option><option value="en">English</option></select></label></div>
       <h1>Battle of Talingchan<br><span>DUEL vs BOT</span></h1>
       <p class="sub">เลือก Deck ของทั้งสองฝ่ายแล้วดวลกับบอท · กฎตาม Rule Book ver. 3.2</p>
       <div class="pick">
@@ -40,7 +41,7 @@
       </details>
       <details class="howto">
         <summary>วิธีเล่นแบบย่อ</summary>
-        <ul>
+        <ul data-en="<li><b>Summon</b>: tap an Avatar in your hand → choose cards in hand to send to Hell as GEM until the Cost is paid (GEM color must match the card; Colorless GEM pays any color; no overpaying)</li><li><b>Magic</b>: no Cost, but one of each type per turn (Normal / Modification / React / Land)</li><li><b>Land Magic</b>: one shared slot; both players can use the Land's ability (once per turn each, on their own turn). A new Land replaces the old one</li><li><b>Attack</b>: go to the Battle Phase → tap your Avatar → choose a target. Higher POWER wins; a tie destroys both</li><li>You can attack LIFE when the opponent has no Avatar (or with &quot;Egg Kick&quot;), one card per attack. When all 5 are face up the player is &quot;Critical&quot;; one more hit loses</li><li>Running out of cards in the Deck loses immediately</li>">
           <li><b>อัญเชิญ</b>: กดการ์ด Avatar บนมือ → เลือกการ์ดบนมือที่จะทิ้งลงนรกเป็น GEM ให้ครบ Cost (สี GEM ต้องตรงกับสีการ์ด, GEM ไร้สีใช้ได้ทุกสี, ห้ามจ่ายเกินจำเป็น)</li>
           <li><b>Magic</b>: ไม่มี Cost แต่ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น (Normal / Modification / React / Land)</li>
           <li><b>Land Magic</b>: มีช่องเดียวกลางสนาม ความสามารถของ Land ใช้ได้ทั้งสองฝ่าย (สั่งใช้ได้ฝ่ายละ 1 ครั้งต่อเทิร์นในเทิร์นของตัวเอง) วาง Land ใหม่จะทับใบเดิม</li>
@@ -92,20 +93,22 @@
     <aside class="panel" id="panel">
       <div id="detail" class="detail"><div class="placeholder">แตะการ์ดเพื่อดูรายละเอียด</div></div>
       <div class="logwrap"><div class="logtitle">บันทึกการดวล</div><div id="log" class="log"></div></div>
-      <div class="panelbtns"><label class="matpick">Playmat <select id="matSel2" aria-label="ลาย Playmat"></select></label><button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button></div>
+      <div class="panelbtns"><label class="matpick">Playmat <select id="matSel2" aria-label="ลาย Playmat"></select></label><select class="langsel small" aria-label="Language"><option value="th">ไทย</option><option value="en">EN</option></select><button id="quitBtn" class="small">ออกไปหน้าเลือก Deck</button></div>
     </aside>
   </section>
 
   <div id="modal" class="modal hidden"><div class="modal-box"><div id="modalTitle" class="modal-title"></div><div id="modalBody" class="modal-body"></div><div id="modalFoot" class="modal-foot"></div></div></div>
   <div id="toast" class="toast hidden"></div>
 </div>
-<script src="cards.js?v=20261012c"></script>
-<script src="effects.js?v=20261012c"></script>
-<script src="engine.js?v=20261012c"></script>
-<script src="bot.js?v=20261012c"></script>
-<script src="decks.js?v=20261012c"></script>
-<script src="builder.js?v=20261012c"></script>
-<script src="net.js?v=20261012c"></script>
-<script src="ui.js?v=20261012c"></script>
+<script src="cards.js?v=20261012d"></script>
+<script src="effects.js?v=20261012d"></script>
+<script src="engine.js?v=20261012d"></script>
+<script src="bot.js?v=20261012d"></script>
+<script src="decks.js?v=20261012d"></script>
+<script src="builder.js?v=20261012d"></script>
+<script src="cards_en.js?v=20261012d"></script>
+<script src="i18n.js?v=20261012d"></script>
+<script src="net.js?v=20261012d"></script>
+<script src="ui.js?v=20261012d"></script>
 </body>
 </html>

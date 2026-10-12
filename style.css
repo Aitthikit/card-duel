@@ -401,3 +401,8 @@ optgroup { background: #141b3d; }
 .modal-body .focus .flife { width: 84px; height: 60px; border-radius: 8px; display: grid; place-items: center; font-family: 'Kanit'; font-weight: 800; background: #2a1830; }
 .card.focus-src { box-shadow: 0 0 0 3px var(--gold), 0 0 18px var(--gold); }
 .card.focus-tgt, .mz.lifebox.focus-tgt { box-shadow: 0 0 0 3px var(--red), 0 0 18px var(--red); animation: pulse 1s infinite; }
+
+/* ----- language switch ----- */
+.langrow { display: flex; justify-content: flex-end; margin: -10px -6px 4px 0; }
+.langrow label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.langrow select, .panelbtns .langsel { width: auto; padding: 4px 8px; font-size: 13px; }
