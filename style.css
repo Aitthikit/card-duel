@@ -160,7 +160,7 @@ optgroup { background: #141b3d; }
 #builder { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; height: 100vh; height: 100dvh; }
 .bhead { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .bname { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.bname input, .bfilters input { background: #141b3d; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-family: inherit; font-size: 14px; min-width: 0; }
+.bname input, .bfilters input, .onrow input { background: #141b3d; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-family: inherit; font-size: 14px; min-width: 0; }
 .bname input { width: 240px; max-width: 50vw; font-family: 'Kanit'; }
 .bstatus { display: flex; gap: 10px; flex-wrap: wrap; font-family: 'Kanit'; font-size: 13px; flex: 1; font-variant-numeric: tabular-nums; }
 .bstatus span { background: rgba(255,255,255,.06); padding: 3px 10px; border-radius: 999px; color: var(--muted); }
@@ -379,3 +379,25 @@ optgroup { background: #141b3d; }
 #duel.stage .detail .big { max-width: 300px; }
 #duel.stage .logtitle { font-size: 16px; }
 #duel.stage .log { font-size: 15px; }
+
+/* ----- online play (start screen) ----- */
+.online { margin-top: 18px; text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.online summary { cursor: pointer; font-family: 'Kanit'; font-weight: 600; }
+.online .sub { margin: 8px 0; }
+.onrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.onrow label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13px; flex: 1 1 200px; }
+.onrow input { min-width: 0; }
+#onCode { width: 9em; text-transform: uppercase; letter-spacing: .15em; font-family: 'Kanit'; }
+.onrow .or { color: var(--muted); font-size: 13px; }
+.onstatus { min-height: 1.4em; font-size: 14px; }
+.onstatus .code { font-family: 'Kanit'; font-size: 26px; letter-spacing: .2em; color: var(--gold); user-select: all; }
+/* ----- react prompt: what is attacking / being targeted ----- */
+.modal-body .focus { flex: 1 0 100%; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px; border-radius: 12px; background: rgba(255, 90, 95, .08); border: 1px dashed rgba(255, 90, 95, .5); }
+.modal-body .focus .fside { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 130px; text-align: center; font-size: 12px; }
+.modal-body .focus .card { --cw: 84px; }
+.modal-body .focus .fside.tgt .card, .modal-body .focus .flife { box-shadow: 0 0 0 3px var(--red), 0 0 14px var(--red); }
+.modal-body .focus .fside.src .card { box-shadow: 0 0 0 3px var(--gold), 0 0 14px var(--gold); }
+.modal-body .focus .fverb { font-family: 'Kanit'; font-weight: 600; color: var(--red); font-size: 16px; }
+.modal-body .focus .flife { width: 84px; height: 60px; border-radius: 8px; display: grid; place-items: center; font-family: 'Kanit'; font-weight: 800; background: #2a1830; }
+.card.focus-src { box-shadow: 0 0 0 3px var(--gold), 0 0 18px var(--gold); }
+.card.focus-tgt, .mz.lifebox.focus-tgt { box-shadow: 0 0 0 3px var(--red), 0 0 18px var(--red); animation: pulse 1s infinite; }

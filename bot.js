@@ -40,8 +40,8 @@
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  async function playTurn(state, p, delay) {
-    const En = E();
+  async function playTurn(state, p, delay, eng) {
+    const En = eng || E(); // eng: an engine whose actions are routed elsewhere (online test mode)
     const wait = async () => { if (delay) await sleep(delay); };
     const pl = state.players[p];
     const alive = () => state.winner == null && state.active === p;

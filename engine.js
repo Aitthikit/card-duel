@@ -503,7 +503,7 @@
     }
     // opponent may counter (ชายจากอนาคต ...)
     await show(state, 'magic', { p, card: inst.card });
-    const r = await reactWindow(state, opp(p), 'magic', { card: inst, caster: p });
+    const r = await reactWindow(state, opp(p), 'magic', { card: inst, caster: p, target });
     if (r && r.cancel) { pl.hell.push(inst); log(state, `ผลของ "${inst.card.name}" ถูกยกเลิก`); return { cancelled: true }; }
     for (const [q, x] of state.players.entries()) for (const a of x.avatars.slice()) { const f = FX(a.card.id); if (f && f.onAnyMagic && !a.lostAbilities) await f.onAnyMagic(api(state), q, a, inst); }
     for (const [q, x] of state.players.entries()) for (const c of x.constructs.slice()) { const f = FX(c.card.id); if (f && f.onAnyMagic && x.constructs.includes(c)) await f.onAnyMagic(api(state), q, c, inst, p); }
@@ -552,6 +552,29 @@
     }));
   }
 
+  // What a react prompt is about: the card that caused it and, when known, the card (or LIFE) it is aimed at.
+  // The UI shows both and highlights them on the board so the player can decide whether to respond.
+  function focusName(state, rp, t) {
+    if (!t) return '';
+    if (t.kind === 'life') return `LIFE ของ${state.players[rp].name}`;
+    const x = t.kind === 'construct' ? state.players.flatMap(q => q.constructs).find(c => c.uid === t.uid) : findAvatar(state, t.uid);
+    return x ? x.card.name : '';
+  }
+  function reactFocus(state, rp, trigger, ctx) {
+    const one = x => (x ? { uid: x.uid, card: x.card } : null);
+    if (trigger === 'attack') {
+      const t = ctx.target || {};
+      const tc = t.kind === 'avatar' ? findAvatar(state, t.uid) : t.kind === 'construct' ? state.players.flatMap(q => q.constructs).find(c => c.uid === t.uid) : null;
+      return { from: one(ctx.attacker), to: t.kind === 'life' ? { life: rp } : one(tc), verb: 'โจมตี' };
+    }
+    if (trigger === 'magic') return { from: { card: ctx.card.card }, to: one(ctx.target), verb: ctx.target ? 'สวมใส่ให้' : 'ใช้' };
+    if (trigger === 'activate') return { from: one(ctx.avatar), verb: 'สั่งใช้ความสามารถ' };
+    if (trigger === 'summon') return { from: one(ctx.avatar), verb: 'อัญเชิญ' };
+    if (trigger === 'constructDestroy') return { to: one(ctx.construct), verb: 'ทำลาย' };
+    if (ctx && ctx.avatar) return { to: one(ctx.avatar), verb: trigger === 'lastWill' ? 'คำสั่งเสีย' : 'ทำลาย' };
+    return null;
+  }
+
   // React window: let player `rp` respond to an event with a React Magic in hand.
   async function reactWindow(state, rp, trigger, ctx) {
     if (state.winner != null) return null;
@@ -581,8 +604,8 @@
         opts.push({ label: f.handCounter.label || `ใช้ความสามารถของ ${h.card.name} จากบนมือ`, card: h.card, value: 'hc:' + h.uid, score: f.handCounter.botScore ? f.handCounter.botScore(api(state), rp, h, ctx) : 1 });
     });
     if (!opts.length) return null;
-    const what = trigger === 'summon' ? `${ctx.avatar.card.name} ถูกอัญเชิญ` : trigger === 'magic' ? `อีกฝ่ายใช้ "${ctx.card.card.name}"` : trigger === 'attack' ? `${ctx.attacker.card.name} กำลังโจมตี` : trigger === 'destroy' ? `${ctx.avatar.card.name} กำลังจะถูกทำลาย` : trigger === 'battleDestroyed' ? `${ctx.avatar.card.name} ถูกทำลายจากการต่อสู้` : trigger === 'destroyedByOpp' ? `${ctx.avatar.card.name} ถูกทำลายโดยอีกฝ่าย` : trigger === 'activate' ? `อีกฝ่ายสั่งใช้ความสามารถของ ${ctx.avatar.card.name}` : trigger === 'battleStart' ? 'อีกฝ่ายเริ่ม Battle Phase' : trigger === 'lastWill' ? `คำสั่งเสีย ของ ${ctx.avatar.card.name}` : trigger === 'constructDestroy' ? `${ctx.construct.card.name} กำลังจะถูกทำลาย` : trigger;
-    const pick = await state.ask(rp, { title: `ตอบโต้? (${what})`, options: opts, optional: true, react: true });
+    const what = trigger === 'summon' ? `${ctx.avatar.card.name} ถูกอัญเชิญ` : trigger === 'magic' ? `อีกฝ่ายใช้ "${ctx.card.card.name}"` : trigger === 'attack' ? `${ctx.attacker.card.name} กำลังโจมตี ${focusName(state, rp, ctx.target)}` : trigger === 'destroy' ? `${ctx.avatar.card.name} กำลังจะถูกทำลาย` : trigger === 'battleDestroyed' ? `${ctx.avatar.card.name} ถูกทำลายจากการต่อสู้` : trigger === 'destroyedByOpp' ? `${ctx.avatar.card.name} ถูกทำลายโดยอีกฝ่าย` : trigger === 'activate' ? `อีกฝ่ายสั่งใช้ความสามารถของ ${ctx.avatar.card.name}` : trigger === 'battleStart' ? 'อีกฝ่ายเริ่ม Battle Phase' : trigger === 'lastWill' ? `คำสั่งเสีย ของ ${ctx.avatar.card.name}` : trigger === 'constructDestroy' ? `${ctx.construct.card.name} กำลังจะถูกทำลาย` : trigger;
+    const pick = await state.ask(rp, { title: `ตอบโต้? (${what})`, options: opts, optional: true, react: true, focus: reactFocus(state, rp, trigger, ctx) });
     if (pick == null) return null;
     if (typeof pick === 'string' && pick.startsWith('hc:')) {
       const h = pl.hand.find(x => x.uid === +pick.slice(3)); if (!h) return null;

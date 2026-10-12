@@ -3,7 +3,7 @@
   'use strict';
   const En = window.TCEngine, Bot = window.TCBot, FX = id => (window.TC_EFFECTS || {})[id];
   const $ = s => document.querySelector(s);
-  const ME = 0, BOT = 1;
+  let ME = 0, BOT = 1;      // BOT = the other side: the bot, or the friend in an online game
   const COLOR_TH = { red: 'แดง', blue: 'น้ำเงิน', green: 'เขียว', yellow: 'เหลือง', purple: 'ม่วง', black: 'ดำ', white: 'ขาว', colorless: 'ไร้สี', grey: 'เทา' };
   const TYPE_TH = { avatar: 'Avatar', magic: 'Magic', construct: 'Construct', life: 'LIFE' };
 
@@ -14,6 +14,9 @@
   let botSpeed = 550;
   let imgBase = '../refs/';
   let lastSetup = null;
+  let focusNow = null;     // react prompt: {from, to} cards highlighted on the board
+  let net = null;          // online game: {link, inbox, waiter, role, autoplay}
+  const oppName = () => (net && G ? G.players[BOT].name : 'บอท');
 
   // ---------- images ----------
   (function detectImgBase() {
@@ -174,12 +177,16 @@
       if (ok) { Decks.remove(d.id); fillDeckSelects(); toast('ลบ Deck แล้ว'); }
     };
     $('#ioBtn').onclick = importExport;
-    $('#battleBtn').onclick = () => act(() => En.goBattle(G, ME));
-    $('#endBtn').onclick = () => act(() => En.endTurn(G, ME));
+    $('#battleBtn').onclick = () => act({ k: 'battle' });
+    $('#endBtn').onclick = () => act({ k: 'end' });
     $('#quitBtn').onclick = async () => {
       const ok = await humanAsk({ title: 'ออกจากการดวลนี้?', options: [{ label: 'ออก', value: 1 }], optional: true });
-      if (ok) { G = null; $('#duel').classList.add('hidden'); $('#start').classList.remove('hidden'); }
+      if (ok) { if (net) net.link.send({ t: 'bye' }); dropOnline(); goHome(); }
     };
+    $('#onHost').onclick = hostRoom;
+    $('#onJoin').onclick = joinRoom;
+    $('#onCode').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+    try { $('#onName').value = localStorage.getItem('tc-duel-name') || ''; } catch (e) { /* storage unavailable */ }
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && mode) { mode = null; render(); } });
   }
 
@@ -207,6 +214,8 @@
 
   async function startGame(setup) {
     lastSetup = setup;
+    dropOnline();
+    ME = 0; BOT = 1;
     const dmy = Decks.get(setup.my), dbot = Decks.get(setup.bot);
     const d1 = Decks.expand(dmy), d2 = Decks.expand(dbot);
     let raf = 0;
@@ -264,7 +273,7 @@
     if (!G || !document.getElementById('duel') || document.getElementById('duel').classList.contains('hidden')) return;
     const k = fxSpeed();
     render();
-    if (type === 'turn') return banner(d.p === ME ? 'ตาของคุณ' : 'ตาของบอท', d.p === ME ? 'mine' : 'theirs', 1100 * k);
+    if (type === 'turn') return banner(d.p === ME ? 'ตาของคุณ' : 'ตาของ' + oppName(), d.p === ME ? 'mine' : 'theirs', 1100 * k);
     if (type === 'battle') return banner('BATTLE PHASE', 'battle', 900 * k);
     if (type === 'summon') {
       const el = uidEl(d.uid); if (!el) return;
@@ -329,11 +338,29 @@
   }
 
   // ---------- actions ----------
-  async function act(fn) {
+  // Every player action is a small plain command, so an online game can send it to the other PC,
+  // which runs the same command on its own copy of the game (both copies stay identical).
+  function exec(cmd, p) {
+    switch (cmd.k) {
+      case 'battle': return En.goBattle(G, p);
+      case 'end': return En.endTurn(G, p);
+      case 'activate': return En.activate(G, p, cmd.uid);
+      case 'cast': return En.cast(G, p, cmd.idx);
+      case 'summon': return En.summon(G, p, cmd.idx, cmd.pay);
+      case 'build': return En.build(G, p, cmd.idx, cmd.pay);
+      case 'attack': return En.attack(G, p, cmd.uid, cmd.target, cmd.sups);
+    }
+    return { ok: false, error: 'คำสั่งไม่ถูกต้อง' };
+  }
+  function runLocal(cmd) {
+    if (net) net.link.send({ t: 'act', a: cmd, h: fingerprint() });
+    return exec(cmd, ME);
+  }
+  async function act(cmd) {
     if (busy || !G || G.winner != null) return;
     busy = true; mode = null; render();
     let r;
-    try { r = await fn(); } catch (e) { console.error(e); r = { ok: false, error: 'เกิดข้อผิดพลาด: ' + e.message }; }
+    try { r = await runLocal(cmd); } catch (e) { console.error(e); r = { ok: false, error: 'เกิดข้อผิดพลาด: ' + e.message }; }
     busy = false; mode = null;
     if (r && r.ok === false) toast(r.error);
     render();
@@ -341,12 +368,189 @@
   }
 
   async function runBotIfNeeded() {
+    if (net) return pumpRemote();
     if (!G || busy || G.winner != null) { if (G && G.winner != null) showGameOver(); return; }
     if (G.active !== BOT || G.phase === 'mulligan') return;
     busy = true; render();
     try { await Bot.playTurn(G, BOT, botSpeed); } catch (e) { console.error(e); toast('บอทเกิดข้อผิดพลาด: ' + e.message); if (G.active === BOT && G.winner == null) await En.endTurn(G, BOT); }
     busy = false; render();
     if (G.winner != null) showGameOver();
+  }
+
+  // ---------- online game (net.js) ----------
+  // Both PCs run the same engine from the same seed and decks. Each side sends its own actions and
+  // its own answers to the game's questions; the other side waits for them in the same order.
+  function netReceive(m) {
+    if (!net) return;
+    if (m.t === 'start') return startOnline(m);
+    if (m.t === 'bye') return netLost('เพื่อนออกจากเกมแล้ว');
+    if (m.t === 'act' || m.t === 'ans' || m.t === 'mull') {
+      if (net.waiter && net.waiter.t === m.t) { const w = net.waiter; net.waiter = null; w.resolve(m); }
+      else { net.inbox.push(m); pumpRemote(); }
+    }
+  }
+  // Next message of type t from the friend (answers to questions and the mulligan)
+  function netNext(t) {
+    const i = net.inbox.findIndex(m => m.t === t);
+    if (i >= 0 && net.inbox.slice(0, i).every(m => m.t !== 'act')) return Promise.resolve(net.inbox.splice(i, 1)[0]);
+    return new Promise(resolve => { net.waiter = { t, resolve }; });
+  }
+  async function pumpRemote() {
+    if (!net || !G) return;
+    if (G.winner != null) { if (!busy) showGameOver(); return; }
+    if (busy || net.waiter || net.mulligan) return;
+    if (net.autoplay && G.active === ME) return autoTurn();
+    if (!net.inbox.length || net.inbox[0].t !== 'act') return;
+    const m = net.inbox.shift();
+    if (m.h && m.h !== fingerprint()) { console.warn('desync', m.h, fingerprint()); net.desync = (net.desync || 0) + 1; toast('เกมของสองเครื่องไม่ตรงกัน ลองเริ่มเกมใหม่'); }
+    busy = true; render();
+    try { const r = await exec(m.a, BOT); if (r && r.ok === false) console.warn('remote action refused', m.a, r.error); } catch (e) { console.error(e); toast('เกิดข้อผิดพลาด: ' + e.message); }
+    busy = false; render();
+    pumpRemote();
+  }
+  // Test mode: the local side is played by the bot, through the same commands a person would send
+  async function autoTurn() {
+    const proxy = Object.assign(Object.create(En), {
+      goBattle: () => runLocal({ k: 'battle' }), endTurn: () => runLocal({ k: 'end' }),
+      activate: (s, p, uid) => runLocal({ k: 'activate', uid }), cast: (s, p, idx) => runLocal({ k: 'cast', idx }),
+      summon: (s, p, idx, pay) => runLocal({ k: 'summon', idx, pay }), build: (s, p, idx, pay) => runLocal({ k: 'build', idx, pay }),
+      attack: (s, p, uid, target, sups) => runLocal({ k: 'attack', uid, target, sups }),
+    });
+    busy = true; render();
+    try { await Bot.playTurn(G, ME, 0, proxy); } catch (e) { console.error(e); if (G && G.active === ME && G.winner == null) await runLocal({ k: 'end' }); }
+    busy = false; render();
+    pumpRemote();
+  }
+  // The index of the picked option(s) means the same thing on both PCs
+  const toIdx = (req, v) => (v == null ? null : Array.isArray(v) ? v.map(x => req.options.findIndex(o => o.value === x)) : req.options.findIndex(o => o.value === v));
+  const fromIdx = (req, i) => (i == null ? null : Array.isArray(i) ? i.map(k => req.options[k] && req.options[k].value) : req.options[i] ? req.options[i].value : null);
+  function askOnline(p, req) {
+    if (!net) return Promise.resolve(null);
+    if (p === ME) {
+      const a = net.autoplay ? Promise.resolve(Bot.botAsk(req)) : humanAsk(req);
+      return a.then(v => { if (net) net.link.send({ t: 'ans', i: toIdx(req, v) }); return v; });
+    }
+    const w = netNext('ans').then(m => fromIdx(req, m.i));
+    render();
+    return w.then(v => { render(); return v; });
+  }
+  // A short summary of the game; both PCs compare it before every action
+  function fingerprint() {
+    const parts = [G.turn, G.phase, G.active, G.land ? G.land.uid : 0];
+    G.players.forEach(pl => parts.push(pl.hand.map(h => h.uid).join('.'), pl.deck.length, pl.deck.length ? pl.deck[0].uid : 0, pl.life.map(l => (l.faceUp ? 1 : 0)).join(''),
+      pl.avatars.map(a => a.uid + (a.rested ? 'r' : '')).join('.'), pl.magicZone.map(m => m.uid).join('.'), pl.constructs.map(c => c.uid).join('.'), pl.hell.length, pl.dark.length));
+    let h = 5381; const str = parts.join('|');
+    for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function netLost(msg) {
+    if (!net) return;
+    const n = net; net = null;
+    n.link.close();
+    if (n.waiter) n.waiter.resolve({ i: null, pick: [] });
+    busy = false;
+    setOnlineStatus('');
+    if (G && G.winner == null && !$('#duel').classList.contains('hidden')) {
+      G.winner = ME; G.winReason = msg; G._shownOver = true; render();
+      humanAsk({ title: msg + ' เกมนี้จบลงแล้ว', options: [{ label: 'กลับหน้าแรก', value: 1 }] }).then(goHome);
+    } else toast(msg);
+  }
+  function goHome() { G = null; $('#modal').classList.add('hidden'); $('#duel').classList.add('hidden'); $('#start').classList.remove('hidden'); }
+
+  // Start screen: create a room or join one
+  function setOnlineStatus(html) { const el = $('#onStatus'); if (el) el.innerHTML = html; }
+  function myOnlineName() { const v = ($('#onName').value || '').trim().slice(0, 20); try { localStorage.setItem('tc-duel-name', v); } catch (e) { /* ignore */ } return v; }
+  function myDeckForOnline() {
+    const d = Decks.get($('#myDeck').value), v = Decks.validate(d);
+    if (!v.ok) { toast('Deck ของคุณยังเล่นไม่ได้: ' + v.problems[0]); return null; }
+    const x = Decks.expand(d);
+    return { deckName: d.name, deck: x.deck.map(c => c.id), life: x.life.map(c => c.id) };
+  }
+  function attachLink(link, role) {
+    net = { link, role, inbox: [], waiter: null, autoplay: !!window.TCUI.autoplay };
+    link.onmessage = m => { if (net && net.link === link) { if (m.t === 'hello') onHello(m); else netReceive(m); } };
+    link.onclose = () => { if (net && net.link === link) netLost('การเชื่อมต่อกับเพื่อนหลุด'); };
+  }
+  let hostCancel = null;
+  function dropOnline() {
+    if (hostCancel) { hostCancel(); hostCancel = null; }
+    if (net) { const n = net; net = null; n.link.close(); }
+  }
+  async function hostRoom() {
+    const mine = myDeckForOnline(); if (!mine) return;
+    dropOnline();
+    mine.name = myOnlineName() || 'ผู้เล่น 1';
+    setOnlineStatus('กำลังสร้างห้อง…');
+    try {
+      const link = await window.TCNet.host((code, cancel) => { hostCancel = cancel || null; setOnlineStatus(`รหัสห้อง <b class="code">${code}</b><br>ส่งรหัสนี้ให้เพื่อน แล้วรอเพื่อนเข้าห้อง…`); });
+      hostCancel = null;
+      attachLink(link, 'host');
+      net.mine = mine;
+      setOnlineStatus('เพื่อนเข้าห้องแล้ว กำลังเริ่มเกม…');
+    } catch (e) { setOnlineStatus(`<span class="badline">${esc(e.message)}</span>`); }
+  }
+  async function joinRoom() {
+    const mine = myDeckForOnline(); if (!mine) return;
+    const code = window.TCNet.cleanCode($('#onCode').value);
+    if (!code) return toast('ใส่รหัสห้องที่เพื่อนส่งมาก่อน');
+    dropOnline();
+    mine.name = myOnlineName() || 'ผู้เล่น 2';
+    setOnlineStatus('กำลังเข้าห้อง ' + esc(code) + '…');
+    try {
+      const link = await window.TCNet.join(code);
+      attachLink(link, 'guest');
+      net.mine = mine;
+      link.send({ t: 'hello', player: mine });
+      setOnlineStatus('เข้าห้องแล้ว รอเจ้าของห้องเริ่มเกม…');
+    } catch (e) { setOnlineStatus(`<span class="badline">${esc(e.message)}</span>`); }
+  }
+  // Host: the friend has sent their deck, so deal the game and send them the same seed
+  function onHello(m) {
+    if (!net || net.role !== 'host') return;
+    net.theirs = m.player;
+    hostNewGame();
+  }
+  function hostNewGame() {
+    const msg = { t: 'start', seed: (Math.random() * 1e9) >>> 0, players: [net.mine, net.theirs] };
+    net.link.send(msg);
+    startOnline(msg);
+  }
+  const byId = id => window.TC_CARDS.find(c => c.id === id);
+  async function startOnline(m) {
+    ME = net.role === 'host' ? 0 : 1; BOT = 1 - ME;
+    net.inbox = net.inbox.filter(x => x.t === 'mull'); net.waiter = null; net.mulligan = true;
+    const ps = m.players.map(x => ({ name: x.name, deckName: x.deckName, deck: x.deck.map(byId), life: x.life.map(byId) }));
+    if (ps[0].name === ps[1].name) ps[1].name += ' (2)';
+    let raf = 0;
+    G = En.createGame({
+      seed: m.seed, players: ps,
+      ask: askOnline,
+      onChange: () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); },
+      onFx: playFx,
+    });
+    const game = G;
+    mode = null; selected = null; busy = false;
+    $('#modal').classList.add('hidden');
+    $('#start').classList.add('hidden'); $('#duel').classList.remove('hidden');
+    $('#oppHand').setAttribute('aria-label', 'การ์ดบนมือของ' + G.players[BOT].name);
+    setOnlineStatus('');
+    render();
+    const pick = net.autoplay ? [] : await humanAsk({
+      title: `${G.first === ME ? 'คุณได้เริ่มก่อน' : G.players[BOT].name + ' ได้เริ่มก่อน'} — เลือกการ์ดที่ต้องการเปลี่ยน (นำไปไว้ใต้ Deck แล้วจั่วใหม่) หรือกด "เก็บไว้ทั้งหมด"`,
+      anyCount: true, options: G.players[ME].hand.map((h, i) => ({ label: h.card.name, card: h.card, value: i })), confirmLabel: 'เปลี่ยนใบที่เลือก', skipLabel: 'เก็บไว้ทั้งหมด', optional: true,
+    });
+    if (!net || G !== game) return;
+    const mine = Array.isArray(pick) ? pick : [];
+    net.link.send({ t: 'mull', pick: mine });
+    if (!net.inbox.some(x => x.t === 'mull')) toast('รอ ' + G.players[BOT].name + ' เลือกการ์ด…');
+    const theirs = (await netNext('mull')).pick || [];
+    if (!net || G !== game) return;
+    const picks = []; picks[ME] = mine; picks[BOT] = theirs;
+    await En.mulligan(G, 0, picks[0]);
+    await En.mulligan(G, 1, picks[1]);
+    net.mulligan = false;
+    render();
+    pumpRemote();
   }
 
   function myTurn(ph) { return G && G.winner == null && !busy && G.active === ME && (!ph || G.phase === ph); }
@@ -392,7 +596,8 @@
     pl.constructs.forEach(c => {
       const t = targets.some(x => x.kind === 'construct' && x.uid === c.uid);
       const can = isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === c.uid);
-      cons.appendChild(cardEl(c.card, { uid: c.uid, cls: 'mini' + (t ? ' target' : '') + (can ? ' can' : '') + (selected && selected.uid === c.uid ? ' sel' : ''), power: En.constructPower(G, c),
+      const fc = focusNow && focusNow.to && focusNow.to.uid === c.uid ? ' focus-tgt' : '';
+      cons.appendChild(cardEl(c.card, { uid: c.uid, cls: 'mini' + fc + (t ? ' target' : '') + (can ? ' can' : '') + (selected && selected.uid === c.uid ? ' sel' : ''), power: En.constructPower(G, c),
         onclick: () => { if (mode && mode.kind === 'attack' && !isMe) return doAttack({ kind: 'construct', uid: c.uid }); select('construct', c); } }));
     });
 
@@ -407,6 +612,7 @@
     const [lifeZ, lifebox] = zoneBox('life', 'Life', `${5 - up}/5`);
     lifeZ.classList.add('lifebox'); lifeZ.dataset.p = p;
     const lifeTarget = targets.some(t => t.kind === 'life');
+    if (focusNow && focusNow.to && focusNow.to.life === p) lifeZ.classList.add('focus-tgt');
     if (lifeTarget) { lifeZ.classList.add('target'); lifeZ.onclick = () => doAttack({ kind: 'life' }); }
     pl.life.forEach(l => {
       const d = document.createElement('div'); d.className = 'life' + (l.faceUp ? ' up' : '');
@@ -441,6 +647,8 @@
       if (isMe && myTurn('battle') && !mode && !a.rested && En.attackTargets(G, ME, a.uid).length) cls += ' can';
       if (isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === a.uid || x.src === a.uid)) cls += ' can';
       if (a.linked) cls += ' linked';
+      if (focusNow && focusNow.from && focusNow.from.uid === a.uid) cls += ' focus-src';
+      if (focusNow && focusNow.to && focusNow.to.uid === a.uid) cls += ' focus-tgt';
       ac.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
       const mine = pl.magicZone.filter(m => m.attachedTo === a.uid);
       if (mine.length) { const mc = cell('mgc', i + 1, mgRow); mine.forEach(m => { placed.add(m.uid); mc.appendChild(magicEl(m)); }); }
@@ -458,7 +666,7 @@
     const hellActs = isMe && actTurn() ? En.activatables(G, ME).filter(x => x.kind === 'hell' || x.kind === 'dark') : [];
     if (hellActs.length) hell.appendChild(chip(`สั่งใช้จากนรก/มิติมืด (${hellActs.length})`, async () => {
       const v = await humanAsk({ title: 'สั่งใช้ความสามารถจากนรก / มิติมืด', optional: true, options: hellActs.map(x => { const h = pl.hell.concat(pl.dark).find(c => c.uid === x.uid); return { label: `${h.card.name}${x.kind === 'dark' ? ' (มิติมืด)' : ''}: ${x.label}`, card: h.card, value: x.uid }; }) });
-      if (v != null) act(() => En.activate(G, ME, v));
+      if (v != null) act({ k: 'activate', uid: v });
     }, true));
     const [deckZ, deck] = zoneBox('deck', 'Deck', `กองจั่ว ${pl.deck.length}`);
     // ฮามดัล: while it is on the field the top card of both decks is face up
@@ -497,7 +705,7 @@
   function renderMid() {
     const pb = $('#phaseBar'); pb.innerHTML = '';
     const t = document.createElement('span'); t.className = 'turnlbl';
-    t.textContent = G.winner != null ? 'จบเกม' : `เทิร์น ${G.turn} · ${G.active === ME ? 'ตาคุณ' : 'ตาบอท'}`;
+    t.textContent = G.winner != null ? 'จบเกม' : `เทิร์น ${G.turn} · ${G.active === ME ? 'ตาคุณ' : 'ตา' + oppName()}`;
     pb.appendChild(t);
     ['draw', 'main', 'battle', 'end'].forEach(ph => { const s = document.createElement('span'); s.className = 'ph' + (G.phase === ph ? ' on' : ''); s.textContent = En.PHASE_TH[ph].replace(' Phase', ''); pb.appendChild(s); });
     $('#battleBtn').disabled = !myTurn('main') || G.turn === 1 || !!mode;
@@ -505,7 +713,8 @@
     $('#endBtn').disabled = !(myTurn('main') || myTurn('battle')) || !!mode;
     const hint = $('#hint');
     if (G.winner != null) hint.textContent = G.winner === ME ? '🏆 คุณชนะ!' : 'คุณแพ้…';
-    else if (G.active === BOT) hint.textContent = 'บอทกำลังเล่น…';
+    else if (net && net.waiter && net.waiter.t === 'ans') hint.textContent = `รอ ${oppName()} ตัดสินใจ…`;
+    else if (G.active === BOT) hint.textContent = oppName() + ' กำลังเล่น…';
     else if (mode && mode.kind === 'pay') { const c = findHand(mode.uid); const sum = [...mode.sel].reduce((s, u) => s + En.gemTotal(findHand(u).card), 0); hint.textContent = `เลือกการ์ดบนมือเพื่อจ่าย GEM: ${sum}/${c.card.cost} (สี${COLOR_TH[c.card.color] || c.card.color}หรือไร้สี) — แล้วกด "ยืนยัน"`; }
     else if (mode && mode.kind === 'attack') hint.textContent = 'เลือกเป้าหมายการโจมตี (กรอบแดง) — Esc เพื่อยกเลิก';
     else if (G.phase === 'main') hint.textContent = 'Main Phase: อัญเชิญ / ใช้ Magic / สั่งใช้ความสามารถ' + (G.turn === 1 ? '' : ' แล้วเข้า Battle Phase');
@@ -557,11 +766,11 @@
       const idx = G.players[ME].hand.indexOf(inst);
       if (c.type === 'avatar') { const r = En.canSummon(G, ME, idx, null); add('อัญเชิญ', () => beginPay(inst), true, !r.ok); if (!r.ok) note(btns, r.error); }
       if (c.type === 'construct') { const r = En.canBuild(G, ME, idx, null); add('ก่อสร้าง', () => beginPay(inst), true, !r.ok); if (!r.ok) note(btns, r.error); }
-      if (c.type === 'magic') { const r = En.canCast(G, ME, idx); add('ใช้ Magic', () => act(() => En.cast(G, ME, G.players[ME].hand.indexOf(inst))), true, !r.ok); if (!r.ok) note(btns, r.error); }
-      En.activatables(G, ME).filter(x => x.kind === 'hand' && x.uid === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid))));
+      if (c.type === 'magic') { const r = En.canCast(G, ME, idx); add('ใช้ Magic', () => act({ k: 'cast', idx: G.players[ME].hand.indexOf(inst) }), true, !r.ok); if (!r.ok) note(btns, r.error); }
+      En.activatables(G, ME).filter(x => x.kind === 'hand' && x.uid === inst.uid).forEach(x => add(x.label, () => act({ k: 'activate', uid: x.uid })));
     }
     if ((selected.zone === 'land' || (['avatar', 'construct', 'magic'].includes(selected.zone) && inst.owner === ME)) && myTurn()) {
-      En.activatables(G, ME).filter(x => x.uid === inst.uid || x.src === inst.uid).forEach(x => add(x.label, () => act(() => En.activate(G, ME, x.uid)), true));
+      En.activatables(G, ME).filter(x => x.uid === inst.uid || x.src === inst.uid).forEach(x => add(x.label, () => act({ k: 'activate', uid: x.uid }), true));
       if (selected.zone === 'avatar' && G.phase === 'battle' && !inst.rested && En.attackTargets(G, ME, inst.uid).length) add('โจมตี', () => { mode = { kind: 'attack', uid: inst.uid }; render(); }, true);
     }
   }
@@ -593,7 +802,7 @@
     const pl = G.players[ME];
     const idx = pl.hand.indexOf(inst);
     const ctx = En.payCtx(G, ME, inst.card);
-    if (ctx.cost === 0) return act(() => inst.card.type === 'construct' ? En.build(G, ME, idx, []) : En.summon(G, ME, idx, []));
+    if (ctx.cost === 0) return act({ k: inst.card.type === 'construct' ? 'build' : 'summon', idx, pay: [] });
     const sug = En.findPayment(pl, idx, null, ctx) || [];
     mode = { kind: 'pay', uid: inst.uid, sel: new Set(sug.map(i => pl.hand[i].uid)) };
     selected = { zone: 'hand', uid: inst.uid };
@@ -608,7 +817,7 @@
     const r = En.checkPayment(inst.card, pay.map(i => pl.hand[i].card), En.payCtx(G, ME, inst.card));
     if (!r.ok) return toast(r.error);
     selected = null;
-    act(() => inst.card.type === 'construct' ? En.build(G, ME, idx, pay) : En.summon(G, ME, idx, pay));
+    act({ k: inst.card.type === 'construct' ? 'build' : 'summon', idx, pay });
   }
 
   async function doAttack(target) {
@@ -620,7 +829,7 @@
         options: sup.map(s => ({ label: s.card.name + (En.hasKw(s.card, 'สามัคคี') ? ' (+' + En.basePower(G, s) + ')' : ' (+1)'), card: s.card, value: s.uid })) });
       if (Array.isArray(pick)) sups = pick;
     }
-    act(() => En.attack(G, ME, uid, target, sups));
+    act({ k: 'attack', uid, target, sups });
   }
 
   function viewZone(p, z) {
@@ -638,7 +847,8 @@
       const foot = $('#modalFoot'); foot.innerHTML = '';
       const multi = req.multi || (req.anyCount ? 99 : 0);
       const sel = new Set();
-      const done = v => { m.classList.add('hidden'); resolve(v); };
+      const done = v => { m.classList.add('hidden'); if (req.focus) { focusNow = null; if (G) render(); } resolve(v); };
+      if (req.focus) { body.appendChild(focusStrip(req.focus)); focusNow = req.focus; if (G) render(); }
       let confirmBtn = null;
       const refresh = () => {
         body.querySelectorAll('[data-v]').forEach(el => el.querySelector('.card') && el.querySelector('.card').classList.toggle('sel', sel.has(el.dataset.k)));
@@ -678,6 +888,25 @@
     return p;
   }
 
+  // "X attacks Y" strip at the top of a react prompt, so the player sees what is being targeted
+  function focusStrip(f) {
+    const w = document.createElement('div'); w.className = 'focus';
+    const side = (x, cls) => {
+      const d = document.createElement('div'); d.className = 'fside ' + cls;
+      if (x && x.life != null) { d.innerHTML = `<div class="flife">LIFE</div><div>LIFE ของ${esc(G.players[x.life].name)}</div>`; return d; }
+      if (!x || !x.card) return null;
+      const own = x.uid != null && G ? (En.findAvatar(G, x.uid) || {}).owner : null;
+      d.appendChild(cardEl(x.card, { onclick: () => { selected = { zone: 'view', uid: 'v', inst: { card: x.card } }; renderDetail(); } }));
+      const l = document.createElement('div'); l.textContent = x.card.name + (own != null ? ` (${own === ME ? 'ของคุณ' : 'ของ' + G.players[own].name})` : ''); d.appendChild(l);
+      return d;
+    };
+    const a = side(f.from, 'src'), b = side(f.to, 'tgt');
+    if (a) w.appendChild(a);
+    const v = document.createElement('div'); v.className = 'fverb'; v.textContent = f.verb + (b ? ' ➜' : ''); w.appendChild(v);
+    if (b) w.appendChild(b);
+    return w;
+  }
+
   function showGameOver() {
     if (!G || G._shownOver) return;
     G._shownOver = true;
@@ -688,9 +917,10 @@
     $('#modalBody').innerHTML = `<div class="gameover"><div class="big-res" style="color:${win ? 'var(--gold)' : 'var(--red)'}">${win ? 'ชนะ!' : 'แพ้'}</div><div>${esc(G.players[1 - G.winner].name)} แพ้เพราะ ${esc(G.winReason)}</div><div style="color:var(--muted);margin-top:6px">จบในเทิร์นที่ ${G.turn}</div></div>`;
     const f = $('#modalFoot'); f.innerHTML = '';
     const again = document.createElement('button'); again.className = 'primary'; again.textContent = 'ดวลอีกครั้ง';
-    again.onclick = () => { m.classList.add('hidden'); startGame(lastSetup); };
-    const back = document.createElement('button'); back.textContent = 'เปลี่ยน Deck';
-    back.onclick = () => { m.classList.add('hidden'); G = null; $('#duel').classList.add('hidden'); $('#start').classList.remove('hidden'); };
+    again.onclick = () => { m.classList.add('hidden'); if (!net) return startGame(lastSetup); if (net.role === 'host') hostNewGame(); };
+    if (net && net.role !== 'host') { again.disabled = true; again.textContent = 'รอเจ้าของห้องเริ่มเกมใหม่'; }
+    const back = document.createElement('button'); back.textContent = net ? 'ออกจากห้อง' : 'เปลี่ยน Deck';
+    back.onclick = () => { if (net) net.link.send({ t: 'bye' }); dropOnline(); goHome(); };
     const look = document.createElement('button'); look.textContent = 'ดูกระดาน';
     look.onclick = () => m.classList.add('hidden');
     f.append(look, back, again);
@@ -723,6 +953,6 @@
   fitStage();
 
   // expose for automated testing
-  window.TCUI = { get game() { return G; }, startGame, humanAsk, cardEl, artEl, toast, esc, get imgBase() { return imgBase; } };
+  window.TCUI = { get game() { return G; }, get online() { return net; }, startGame, humanAsk, cardEl, artEl, toast, esc, get imgBase() { return imgBase; } };
   initStart();
 })();
