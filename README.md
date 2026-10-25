@@ -9,6 +9,8 @@ Rules follow Rule Book ver. 3.2. Card data comes from [bottcg.com](https://bottc
 
 ## Getting started
 
+The site asks for an ID and password first. Ask the site owner for them. Your browser remembers the login after the first time.
+
 1. Switch the **ภาษา / Language** box (top right of the start screen) to **English**.
 2. Pick **Your Deck** and the **Bot's Deck** (Starter Decks KD01–KD04, or a Deck you built).
 3. Pick the **Bot level** and press **Start duel**.
@@ -83,6 +85,7 @@ Some cards still don't work correctly or don't work yet. If you find one, please
 | `cards_en.js`, `i18n.js` | English card effect text and the Thai / English switch |
 | `bot.js` | Starter Decks and the four bot levels |
 | `net.js` | Online play with room codes (PeerJS) |
+| `auth.js` | Login screen (stores only a hash of the password) |
 | `decks.js`, `builder.js` | Deck list, Deck rules and the Deck builder |
 | `refs/` | Card images |
 | `backs/`, `mats/` | Card backs and playmats |
