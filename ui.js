@@ -672,8 +672,9 @@
     }, true));
     const [deckZ, deck] = zoneBox('deck', 'Deck', `กองจั่ว ${pl.deck.length}`);
     // ฮามดัล: while it is on the field the top card of both decks is face up
-    const reveal = G.players.some(x => x.avatars.some(a => (FX(a.card.id) || {}).revealTop && !a.lostAbilities));
-    if (pl.deck.length) { const b = cardEl(reveal ? pl.deck[0].card : null, { cls: 'mini' }); b.dataset.n = pl.deck.length; if (reveal) b.title = 'การ์ดบนสุดของ Deck (หงายด้วยฮามดัล)'; deck.appendChild(b); }
+    // นักข่าวสาว เดย์วัน: only the opponent's deck, while she has a "ตำรวจ" with her
+    const reveal = G.players.some(x => x.avatars.some(a => { const f = FX(a.card.id) || {}; return f.revealTop && !a.lostAbilities && (f.revealTop === true || f.revealTop(G, a, G.players.indexOf(pl))); }));
+    if (pl.deck.length) { const b = cardEl(reveal ? pl.deck[0].card : null, { cls: 'mini' }); b.dataset.n = pl.deck.length; if (reveal) b.title = 'การ์ดบนสุดของ Deck (หงายหน้า)'; deck.appendChild(b); }
 
     [consZ, landZ, infoZ, lifeZ, avZ, magZ, cols, hellZ, deckZ].forEach(z => root.appendChild(z));
   }

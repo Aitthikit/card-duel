@@ -1432,7 +1432,7 @@
   const milledByGod = src => src && src.card && (purpleGod(src.card) || src.card.type === 'magic');
   E['BT05-026'] = { // เฮล่า
     onMilled: async (A, p, c, src) => {
-      if (!src || !purpleGod(src.card) || !A.state.land || A.state.land.card.id !== 'BT02-060' || !A.avatars(p).some(a => purpleGod(a.card)) || !A.roomFor(p, c.card)) return;
+      if (!src || !purpleGod(src.card) || !A.state.land || A.state.land.card.name !== 'แอสการ์ดคือสถานที่ไม่ใช่ผู้คน' || !A.avatars(p).some(a => purpleGod(a.card)) || !A.roomFor(p, c.card)) return;
       if (await askYes(A, p, 'เฮล่าถูกธรณีสูบ: อัญเชิญลงสนามทันที?', 2)) await A.summonFrom(p, A.hell(p), c, { jutti: false });
     },
     activateLabel: 'ธรณีสูบสูงสุด 5: Avatar {เทพ} สีม่วง POWER +X',
@@ -2106,7 +2106,7 @@
   E['BT06-065'] = { // รูปปั้นพระอิศวร
     drawPhase: async (A, p) => {
       if (A.deck(p).length < 3 || !await askYes(A, p, 'รูปปั้นพระอิศวร: สอดแนม 2 ใบ นำการ์ด {เทพ} ขึ้นมือแทนการจั่ว?', 1)) return false;
-      await lookTopBottom(A, p, 2, [{ pred: c => c.symbol === 'เทพ', title: 'นำการ์ด {เทพ} ขึ้นมือ' }], async c => A.toHand(p, c));
+      await lookTopBottom(A, p, 2 + templeBonus(A, p), [{ pred: c => c.symbol === 'เทพ', title: 'นำการ์ด {เทพ} ขึ้นมือ' }], async c => A.toHand(p, c));
       return true;
     },
   };
@@ -2943,7 +2943,7 @@
       if (A.hell(p).some(c => A_named(c.card, 'พลเดินทัพ'))) opts.push({ label: 'นำ "พลเดินทัพ" จากนรกกลับเข้า Deck', value: 2, score: 0.5 });
       const v = await A.choose(p, 'เรือรบโบราณ: เลือกปฏิบัติ', opts);
       if (v === 2) { const c = A.hell(p).find(c => A_named(c.card, 'พลเดินทัพ')); A.deck(p).push(A.takeFrom(A.hell(p), c)); A.shuffleDeck(p); return; }
-      await lookTopBottom(A, p, 5, [{ pred: c => isAvatar(c) && (A_named(c, 'พลเดินทัพ') || A_named(c, GENERAL3)) && c.symbol === FOREIGN && (c.power || 0) <= 2, title: 'เลือก "พลเดินทัพ"/"ขุนพล"' }], async c => {
+      await lookTopBottom(A, p, 5 + templeBonus(A, p), [{ pred: c => isAvatar(c) && (A_named(c, 'พลเดินทัพ') || A_named(c, GENERAL3)) && c.symbol === FOREIGN && (c.power || 0) <= 2, title: 'เลือก "พลเดินทัพ"/"ขุนพล"' }], async c => {
         if (A.roomFor(p, c.card) && await askYes(A, p, `อัญเชิญ ${c.card.name} (ไม่เลือก = ขึ้นมือ)?`, 1)) await A.summonFrom(p, [], c, { jutti: false }); else A.toHand(p, c);
       });
     },
@@ -3882,7 +3882,7 @@
     if (['BT11-028', 'BT11-029', 'BT11-030', 'BT11-031'].includes(c.id) && !(c.alsoNamed || []).includes(SMC)) c.alsoNamed = (c.alsoNamed || []).concat(SMC);
     if (c.id === 'BT11-033' && !(c.alsoNamed || []).includes('เลอร์ติ๊ก เด็กไม่ชอบแดรคคูลา')) c.alsoNamed = (c.alsoNamed || []).concat('เลอร์ติ๊ก เด็กไม่ชอบแดรคคูลา');
   });
-  const pickAv = async (A, p, xs, title, score, optional) => { if (!xs.length) return null; const v = await A.choose(p, title, xs.map(x => A.avOpt(x, score ? score(x) : A.power(x))), optional); return xs.find(x => x.uid === v) || (optional ? null : xs[0]); };
+  const pickAv = async (A, p, xs, title, score, optional) => { xs = xs.filter(x => A.canTarget(p, x)); if (!xs.length) return null; const v = await A.choose(p, title, xs.map(x => A.avOpt(x, score ? score(x) : A.power(x))), optional); return xs.find(x => x.uid === v) || (optional ? null : xs[0]); };
   const nutHost = a => A_named(a.card, NUT) || A_named(a.card, SIRNUT);
   const hasCity = (A, p) => A.constructs(p).some(c => c.card.name === CITY);
   const isXVI = c => isAvatar(c) && A_named(c, XVI);
@@ -4343,13 +4343,13 @@
         const c = await A.pickFrom(p, A.dark(p), x => A_named(x, CITYW), 'เลือก "อาวุธนคร" ในมิติมืด'); if (!c) return;
         const t = await pickAv(A, p, A.avatars(p).filter(x => A.named(x.card, GUN) && oneWeapon(A, x, c.card.name)), `สวมใส่ "${c.card.name}" ให้ใบไหน`); if (!t) return;
         A.markMagicUsed(p, 'modification'); await A.attach(p, A.takeFrom(A.dark(p), c), t); A.addPower(t, 2, 'endTurn');
-      } else await lookTop(A, p, 5, c => c.type === 'magic' && A_named(c, CITYW), 'เนรเทศ "อาวุธนคร" ไปมิติมืด', async c => { A.dark(p).push(c); A.log(`"${c.card.name}" ถูกเนรเทศ`); });
+      } else await lookTop(A, p, 5 + templeBonus(A, p), c => c.type === 'magic' && A_named(c, CITYW), 'เนรเทศ "อาวุธนคร" ไปมิติมืด', async c => { A.dark(p).push(c); A.log(`"${c.card.name}" ถูกเนรเทศ`); });
     },
   };
   E['BT11-073'] = { controlGuard: true }; // รูปประจำบ้าน
   E['BT11-074'] = { // แป้นสกุล อิเล็กทรอนิกส์
     activateLabel: 'สอดแนม 5: วาง "เครื่องใช้ไฟฟ้า" ที่ Magic Zone', canActivate: (A, p) => A.deck(p).length > 5,
-    activate: async (A, p) => { await lookTop(A, p, 5, c => isAvatar(c) && A_named(c, APPL), 'วาง "เครื่องใช้ไฟฟ้า" ที่ Magic Zone', async c => parkAppliance(A, p, c)); },
+    activate: async (A, p) => { await lookTop(A, p, 5 + templeBonus(A, p), c => isAvatar(c) && A_named(c, APPL), 'วาง "เครื่องใช้ไฟฟ้า" ที่ Magic Zone', async c => parkAppliance(A, p, c)); },
     untargetableConstruct: (A, x, owner) => { const up = q => A.state.players[q].life.filter(l => l.faceUp).length; return up(owner) > up(A.opp(owner)); },
   };
   E['BT11-075'] = { life: async (A, p) => { const c = await A.pickFrom(p, A.hell(p), x => x.type === 'magic' && x.magicType === 'modification', 'นำ Modification Magic จากนรกขึ้นมือ', true); if (c) A.toHand(p, A.takeFrom(A.hell(p), c)); } }; // อ่อ เปอร์ลา
@@ -5041,6 +5041,258 @@
   E['SD09-020'] = { magic: true, activateLabel: 'เซ่นไหว้ "วานร": จั่ว 1 ใบ', canActivate: (A, p) => A.avatars(p).some(a => isMonkey(A, a)), activate: async (A, p) => { const x = await pickAv(A, p, A.avatars(p).filter(a => isMonkey(A, a)), 'เซ่นไหว้ "วานร"', a => (a.card.token ? 5 : -A.power(a))); if (x) { await A.sacrifice(p, x); A.draw(p, 1); } } }; // ป่าแห่งเมืองขีดขิน
   const lifeMonkey = { life: async (A, p) => { if (monkeysInHell(A, p) >= 4) await monkeyToken(A, p, 1); } };
   E['SD09-023'] = lifeMonkey; E['SD09-024'] = lifeMonkey;
+  // ================= audit fixes: abilities that were missing or only partly done =================
+  // โอตะ option 2: "summon this card from its equipped state to the Avatar Zone" (shares the once-per-turn with option 1)
+  const otaBack = {
+    equipActivateLabel: 'อัญเชิญใบนี้จากสภาพสวมใส่ลง Avatar Zone',
+    canEquipActivate: (A, p, m) => isAvatar(m.card) && A.roomFor(p, m.card),
+    equipActivate: async (A, p, m) => {
+      const pl = A.state.players.find(x => x.magicZone.includes(m)); if (!pl) return;
+      pl.magicZone.splice(pl.magicZone.indexOf(m), 1); m.attachedTo = null;
+      await A.summonFrom(p, [], m, { jutti: false });
+    },
+  };
+  ['KD03-008', 'BT02-010', 'BT08-021'].forEach(id => Object.assign(E[id], otaBack));
+  E['BT03-014'] = E['KD03-008'];
+  // โอตะคูลา: equips to ไอดอล or มีมมิ; extra ability: exile this + discard 1 → มีมมิ from Deck
+  const isMimmi = c => isAvatar(c) && A_named(c, 'มีมมิ');
+  const otaculaTutor = async (A, p, self, fromZone) => {
+    if (fromZone) { const pl = A.state.players.find(x => x.magicZone.includes(self)); if (pl) { pl.magicZone.splice(pl.magicZone.indexOf(self), 1); self.attachedTo = null; A.state.players[self.owner].dark.push(self); A.log(`"${self.card.name}" ถูกเนรเทศ`); } } else A.banishAvatar(self);
+    await A.discard(p, 1); await tutor(isMimmi, 'นำ "มีมมิ" ขึ้นมือ')(A, p);
+  };
+  const canOtaculaTutor = (A, p) => A.hand(p).length > 0 && A.deck(p).some(c => isMimmi(c.card));
+  E['KD03-002'] = Object.assign({}, E['KD03-002'], {
+    activateLabel: 'โอตะคูลา: สวมใส่ให้ "ไอดอล"/"มีมมิ" หรือ เนรเทศ+ทิ้ง 1 หา "มีมมิ"',
+    canActivate: (A, p, a) => A.avatars(p).some(x => x !== a && (A.named(x.card, IDOL) || A.named(x.card, 'มีมมิ'))) || canOtaculaTutor(A, p),
+    activate: async (A, p, a) => {
+      const hosts = A.avatars(p).filter(x => x !== a && (A.named(x.card, IDOL) || A.named(x.card, 'มีมมิ')));
+      const opts = hosts.map(x => A.avOpt(x, A.power(x) + 1));
+      if (canOtaculaTutor(A, p)) opts.push({ label: 'เนรเทศใบนี้ + ทิ้ง 1 ใบ: นำ "มีมมิ" จาก Deck ขึ้นมือ', value: 'tutor', score: 0.5 });
+      const v = await A.choose(p, 'โอตะคูลา: เลือก', opts); if (v == null) return;
+      if (v === 'tutor') { await otaculaTutor(A, p, a, false); return; }
+      const t = hosts.find(x => x.uid === v); if (!t) return;
+      const pl = A.state.players[p]; pl.avatars.splice(pl.avatars.indexOf(a), 1); await A.attach(p, a, t);
+    },
+    equipActivateLabel: 'โอตะคูลา: อัญเชิญจากสภาพสวมใส่ หรือ เนรเทศ+ทิ้ง 1 หา "มีมมิ"',
+    canEquipActivate: (A, p, m) => A.roomFor(p, m.card) || canOtaculaTutor(A, p),
+    equipActivate: async (A, p, m) => {
+      const opts = []; if (A.roomFor(p, m.card)) opts.push({ label: 'อัญเชิญใบนี้ลง Avatar Zone', value: 1, score: 1 });
+      if (canOtaculaTutor(A, p)) opts.push({ label: 'เนรเทศใบนี้ + ทิ้ง 1 ใบ: นำ "มีมมิ" จาก Deck ขึ้นมือ', value: 2, score: 0.5 });
+      const v = await A.choose(p, 'โอตะคูลา: เลือก', opts); if (v === 1) await otaBack.equipActivate(A, p, m); else if (v === 2) await otaculaTutor(A, p, m, true);
+    },
+  });
+  // แบมบูจัง: destroy any one card on the field (not just an opponent's Avatar)
+  E['KD03-004'] = Object.assign({}, E['KD03-004'], {
+    canActivate: (A, p) => A.state.players[p].magicZone.some(m => A.named(m.card, OTA) && A.avatars(p).some(x => x.uid === m.attachedTo && A.named(x.card, IDOL))),
+    activate: async (A, p) => {
+      const pl = A.state.players[p];
+      const otas = pl.magicZone.filter(m => A.named(m.card, OTA) && A.avatars(p).some(x => x.uid === m.attachedTo && A.named(x.card, IDOL)));
+      const m = await A.pickFrom(p, otas, () => true, 'ทำลาย "โอตะ" ที่สวมใส่'); if (!m) return;
+      A.destroyMagic(m); await destroyAnyFieldCard(A, p);
+    },
+  });
+  E['BT03-026'] = E['KD03-004'];
+  // เวทีแห่งความฝัน: option 1 (scout 5, equip up to 2 "โอตะ" to one ไอดอล) was missing
+  E['KD03-020'] = {
+    magic: true,
+    activateLabel: 'ทิ้ง 1: สอดแนม 5 สวม "โอตะ" / สอดแนม 7 หา "ไอดอล"',
+    canActivate: (A, p) => A.hand(p).length > 0,
+    activate: async (A, p) => {
+      const idols = A.avatars(p).filter(x => A.named(x.card, IDOL));
+      const v = await A.choose(p, 'เวทีแห่งความฝัน: เลือกปฏิบัติ', [idols.length ? { label: 'สอดแนม 5: สวม "โอตะ" สูงสุด 2 ใบให้ "ไอดอล"', value: 1, score: 2 } : null, { label: 'สอดแนม 7: นำ "ไอดอล" ขึ้นมือ', value: 2, score: 1 }].filter(Boolean));
+      await A.discard(p, 1);
+      if (v === 1 && idols.length) {
+        const t = await pickAv(A, p, A.avatars(p).filter(x => A.named(x.card, IDOL)), 'เลือก "ไอดอล" ที่จะสวม "โอตะ"');
+        const d = A.deck(p); const seen = d.splice(0, Math.min(5, d.length)); A.log(`สอดแนม ${seen.length} ใบ`);
+        for (let k = 0; k < 2 && t && A.onField(t); k++) { const w = await A.choose(p, `สวม "โอตะ" ให้ ${t.card.name} (${k + 1}/2)`, seen.filter(c => A_named(c.card, OTA)).map(c => A.cardOpt(c)), true); const c = seen.find(x => x.uid === w); if (!c) break; seen.splice(seen.indexOf(c), 1); await A.attach(p, c, t); }
+        d.push(...seen); A.shuffleDeck(p); return;
+      }
+      const got = await A.scout(p, 7, c => isAvatar(c) && A.named(c, IDOL), 'นำ "ไอดอล" ขึ้นมือ'); got.forEach(c => A.toHand(p, c)); A.shuffleDeck(p);
+    },
+  };
+  // สัญญาเลือด: if milled, exile it to summon "นายนิรยบาล" from hell
+  E['KD02-014'].onMilled = async (A, p, c) => {
+    if (!A.hell(p).includes(c) || !A.roomFor(p) || !A.hell(p).some(x => isAvatar(x.card) && A_named(x.card, NIRAYA))) return;
+    if (!await askYes(A, p, 'สัญญาเลือด ถูกธรณีสูบ: เนรเทศใบนี้ เพื่ออัญเชิญ "นายนิรยบาล" จากนรก?', 2)) return;
+    A.exile(p, A.hell(p), c); const n = await A.pickFrom(p, A.hell(p), x => isAvatar(x) && A_named(x, NIRAYA), 'อัญเชิญ "นายนิรยบาล" จากนรก'); if (n) await A.summonFrom(p, A.hell(p), n, { jutti: false });
+  };
+  // หอกแหลมแทงทุกวัน: if milled, it can be used from hell (equip to a {นรก} Avatar; counts as the turn's Modification Magic)
+  const spearFromHell = async (A, p, c) => {
+    const xs = A.avatars(p).filter(a => A.isSym(a, 'นรก')); if (!xs.length || !A.hell(p).includes(c) || A.magicUsed(p, 'modification')) return;
+    if (!await askYes(A, p, `ใช้ "${c.card.name}" ที่ถูกธรณีสูบ สวมใส่ให้ Avatar {นรก}?`, 2)) return;
+    const t = await pickAv(A, p, xs, 'สวมใส่ให้ใบไหน'); if (!t) return; A.markMagicUsed(p, 'modification'); await A.attach(p, A.takeFrom(A.hell(p), c), t);
+  };
+  E['KD02-019'] = { magic: true, equipPower: (A, a) => (A.isSym(a, 'นรก') ? 1 : 0), onMilled: spearFromHell };
+  E['SD03-018'] = { magic: true, equipOk: (A, a) => A.isSym(a, 'นรก'), equipPower: 1, onMilled: spearFromHell }; // was copying the เทพธิดาแห่งวัลฮัลลา spear by mistake
+  // เนียจัง: โอตะท๊อปโดเนท counts as 2 cards for its cost
+  {
+    const otaW = m => (m.card.id === 'BT08-021' ? 2 : 1);
+    const idolOtas = (A, p) => A.avatars(p).filter(x => A.named(x.card, IDOL)).flatMap(x => A.attached(x)).filter(m => A_named(m.card, OTA));
+    const nia = E['BT08-029'];
+    nia.canActivate = (A, p, a) => ((a.otaUses || {})[A.state.turn] || 0) < (A.avatars(p).some(x => A.named(x.card, 'ทัตดนัยซัง')) ? 2 : 1) && A.avatars(A.opp(p)).length > 0 && idolOtas(A, p).reduce((s, m) => s + otaW(m), 0) >= 2;
+    nia.activate = async (A, p, a) => {
+      a.otaUses = { [A.state.turn]: ((a.otaUses || {})[A.state.turn] || 0) + 1 };
+      for (let paid = 0; paid < 2;) { const ms = idolOtas(A, p); const v = await A.choose(p, `ทำลาย "โอตะ" ที่สวมใส่ (นับแล้ว ${paid}/2)`, ms.map(m => A.cardOpt(m, otaW(m)))); const m = ms.find(x => x.uid === v) || ms[0]; if (!m) break; paid += otaW(m); A.destroyMagic(m); }
+      const d = await pickAv(A, p, A.avatars(A.opp(p)), 'เปลี่ยน Avatar อีกฝ่ายเป็น "โอตะ" แล้วสวมใส่ให้ เนียจัง', x => A.power(x)); if (!d || !A.onField(a)) return;
+      const pl = A.state.players[d.owner]; A.takeFrom(pl.avatars, d); d.origCard = d.origCard || d.card; d.card = Object.assign({}, d.card, { name: 'โอตะ (' + d.origCard.name + ')' }); await A.attach(p, d, a);
+    };
+  }
+  // ทองเหม็น: cannot attack LIFE without ค่ายบางระจัน
+  E['PRMO-105'].selfNoLifeAttack = (A, a) => !A.constructs(a.owner).some(c => A_named(c.card, 'ค่ายบางระจัน'));
+  // ลิโป้: opponents' Avatars get โล่มนุษย์ in the Battle Phase, must use it when he attacks, and he destroys one when the target changes on our turn
+  E['SD07-007'] = {
+    oppKwAura: A => (A.state.phase === 'battle' ? ['โล่มนุษย์'] : []),
+    forceShield: true,
+    onRetarget: async (A, p) => { if (A.state.active !== p) return; const d = await pickAv(A, p, A.avatars(A.opp(p)), 'ลิโป้: ทำลาย Avatar อีกฝ่าย 1 ใบ', x => A.power(x) + A.cost(x), true); if (d) await A.destroy(d, 'ลิโป้ ขุนพลเทพสงคราม', p); },
+  };
+  E['SD07-020'].suppressOpp = () => ['kw:สามัคคี']; // ด่านเฮาโลก๋วน: opponents can't use สามัคคี
+  // Skill : Hypersense: the Avatar loses all abilities until end of turn (and may then be destroyed)
+  E['BT09-059'].react.run = async (A, p, ctx) => {
+    const a = ctx.avatar; if (a && A.onField(a)) { a.lostAbilities = true; a.silenceUntil = A.state.turn + 1; A.log(`${a.card.name} สูญเสียความสามารถทั้งหมดจนจบเทิร์น`); }
+    if (hellMagic(A, p) >= 8 && a && A.onField(a) && await askYes(A, p, `ทำลาย ${a.card.name} ด้วย?`, 2)) await A.destroy(a, 'Skill : Hypersense', p);
+    return { negate: true };
+  };
+  // older printings that were implemented less completely than their reprint
+  [['KD01-009', 'BT03-002'], ['KD01-020', 'BT02-060'], ['KD03-005', 'BT04-009'], ['KD03-006', 'BT05-043'], ['KD03-007', 'BT02-010'], ['KD04-004', 'BT06-009'], ['KD04-008', 'BT05-007'], ['KD04-015', 'BT05-063']].forEach(([a, b]) => { E[a] = E[b]; });
+
+  // ================= audit fixes, part 2: abilities that needed new game rules =================
+  // มาติเนซ: when the "รถถัง" wearing it is targeted by a Magic, destroy this to cancel that Magic's ability
+  E['BT04-030'] = Object.assign({}, E['BT04-030'], { cancelMagicOnTarget: (A, m, host) => A.named(host.card, 'รถถัง') });
+  // กวนอู: opponents can't choose our {ต่างชาติ} "ขุนพล" with card abilities (except กวนอู himself)
+  E['PRMO-091'] = { controlImmune: true, shieldTarget: (A, src, x) => A.avatars(src.owner).includes(x) && A.named(x.card, 'ขุนพล') && A.isSym(x, 'ต่างชาติ') && x.card.name !== 'กวนอู ขุนพลภักดีแห่งจ๊กก๊ก' };
+  // มะม่วงดราชิลด์: 1 tree = can't be destroyed by card abilities; 3 trees = our "มะม่วง" {ต้นไม้} can't be targeted by the opponent
+  Object.assign(E['BT11-070'], {
+    landNoDestroy: (A, land) => mangoInMZ(A, land.owner).length >= 1,
+    shieldTarget: (A, land, x) => mangoInMZ(A, land.owner).length >= 3 && A_named(x.card, MANGO) && x.card.symbol === 'ต้นไม้',
+  });
+  // ผู้พิทักษ์แห่งภาคีมะม่วง: while in our Magic Zone, our mango trees there can't be destroyed by the opponent's cards
+  E['BT10-042'] = { lastWill: mangoLastWill, guardParked: (A, g, m) => m.parked && isMango(m.card) };
+  // แมวนิค: its controller can't take cards from the Deck into the hand with card abilities
+  E['CC01-016'] = Object.assign({}, E['CC01-016'], { lockDeckToHand: true });
+  // 1 - 2 - 2: no Deck-to-hand until the end of our next turn, and no draw in the next Draw Phase
+  E['BT10-057'].magic = async (A, p) => { A.draw(p, 3); const pl = A.state.players[p]; pl.skipDraw = true; pl.deckLockUntil = A.state.turn + 2; A.log('จนจบเทิร์นถัดไปของเรา: นำการ์ดจาก Deck ขึ้นมือไม่ได้ และ Draw Phase ถัดไปไม่ได้จั่ว'); };
+  // "must attack if able"
+  E['BT02-028'].mustAttackHost = (A, m, host) => A.named(host.card, 'รถถัง'); // สตีฟ
+  E['CC01-047'] = { magic: true, equipPower: 2, mustAttackHost: () => true }; // ตุ๊กตางูพันคอ
+  E['CC02-048'].mustAttackHost = () => true; // ปืนจักรวุทธ
+  // THE END: the chosen ไมเกรน battles every opposing Avatar at once when it attacks, until end of turn
+  E['KD04-012'].magic = async (A, p) => {
+    const x = await pickAv(A, p, A.avatars(p).filter(a => A.named(a.card, MIGRAINE)), 'เลือก "ไมเกรน": เมื่อโจมตี จะต่อสู้กับ Avatar อีกฝ่ายทุกใบพร้อมกัน');
+    if (x) { x.attackAllTurn = A.state.turn; A.log(`${x.card.name}: เมื่อโจมตี จะต่อสู้กับ Avatar ฝ่ายตรงข้ามทุกใบพร้อมกัน จนจบเทิร์น`); }
+  };
+  // ไมเกรน's สอดแนม: THE END seen this way goes to the hand
+  const migraineScout = async (A, p) => {
+    const d = A.deck(p); const seen = d.splice(0, Math.min(5, d.length)); A.log(`${A.state.players[p].name} สอดแนม ${seen.length} ใบ`);
+    const v = await A.choose(p, 'นำ "อาวุธหุ่นนักรบผู้กล้า" ขึ้นมือ', seen.filter(c => isWeapon(c.card)).map(c => A.cardOpt(c)), true);
+    const c = seen.find(x => x.uid === v); if (c) { seen.splice(seen.indexOf(c), 1); A.toHand(p, c); }
+    for (const e of seen.filter(x => x.card.name === 'สุดยอดท่าไม้ตายผู้กล้า THE END')) { seen.splice(seen.indexOf(e), 1); A.toHand(p, e); }
+    d.push(...seen);
+  };
+  E['KD04-003'].onSummon = migraineScout; E['PRMO-078'].onSummon = migraineScout;
+  // พระไตรปิฎก: the win check happens in our Draw Phase, from the Magic Zone
+  E['BT11-056'].mzDrawPhase = async (A, p) => { if (sutras(A, p) >= 3 && SAIYU.every(n => saiyuOn(A, p, n))) A.win(p, 'พระไตรปิฎก 3 ใบ และคณะเดินทางครบ 4'); };
+  delete E['BT11-047'].mainStart;
+  // ปื๊ดเปรตกังฟู: flips a LIFE whenever it leaves the field (not only when destroyed)
+  E['CC01-005'] = { continuousSelf: (A, p) => A.state.players[p].life.filter(l => !l.faceUp).length, leaveFlipLife: true };
+  // พระแม่อุมาเทวี: the 2nd ability can be used in any player's turn
+  { const uma = E['BT07-002']; uma.fieldCounter = { on: ['summon', 'magic', 'attack', 'activate', 'battleStart'], label: 'พระแม่อุมาเทวี: ส่งลงนรก อัญเชิญ จุติ เจ้าแม่กาลี', when: (A, p, a) => uma.canActivate(A, p, a), botScore: () => 2, run: async (A, p, a) => { await uma.activate(A, p, a); return {}; } }; }
+  // ชิโยเมะ: can be used from the hand in the opponent's Main Phase too
+  { const ch = E['BT10-006']; ch.handCounter = { on: ['summon', 'magic', 'activate'], label: 'ชิโยเมะ: นำ "นินจา" กลับขึ้นมือ แล้วอัญเชิญใบนี้', when: (A, p, h) => A.state.phase === 'main' && A.state.active !== p && ch.canHandActivate(A, p, h), botScore: () => 1, run: async (A, p, h) => { await ch.handActivate(A, p, h); return {}; } }; }
+  // แกงส้มตะปูเสียบ: destroy the host whenever its POWER becomes 0
+  E['BT03-052'].zeroKillsHost = true;
+  // {กะปอม} สอดแนม: เทอราโนดอน's +1 applies to every one, and ยุคกาฬสินธุ์โซอิค seen this way can be used on the Land zone
+  const zoicFromScout = async (A, p, seen) => {
+    const z = seen.find(c => c.card.name === 'ยุคกาฬสินธุ์โซอิค'); if (!z || A.magicUsed(p, 'land')) return;
+    if (!await askYes(A, p, 'สอดแนมเจอ "ยุคกาฬสินธุ์โซอิค": ใช้งานบน Land Magic Zone?', 1.5)) return;
+    seen.splice(seen.indexOf(z), 1); A.markMagicUsed(p, 'land'); await A.placeLand(p, z);
+  };
+  const kLookTop = async (A, p, n, pred, title, then) => {
+    const d = A.deck(p); const seen = d.splice(0, Math.min(kapomScout(A, p, n), d.length));
+    A.log(`${A.state.players[p].name} สอดแนม ${seen.length} ใบ`);
+    const v = await A.choose(p, title, seen.filter(c => pred(c.card)).map(c => A.cardOpt(c)), true);
+    const c = seen.find(x => x.uid === v); if (c) seen.splice(seen.indexOf(c), 1);
+    await zoicFromScout(A, p, seen);
+    d.push(...seen); A.shuffleDeck(p);
+    if (c) await then(c);
+    return c;
+  };
+  E['BT03-011'] = { onSummon: async (A, p) => { if (A.roomFor(p)) await kLookTop(A, p, 5, c => isAvatar(c) && c.symbol === KAPOM && (c.cost || 0) <= 3, 'อัญเชิญ Avatar {กะปอม} Cost ≤3', c => A.summonFrom(p, [], c, { jutti: false })); } }; // กินรีมิมัส
+  E['BT06-011'].lastWill = async (A, p, self) => {
+    if (!A.roomFor(p)) return;
+    await kLookTop(A, p, 3, c => isAvatar(c) && A_named(c, 'ไดโนกาฬสินธุ์') && (c.cost || 0) <= 3 && c.name !== self.card.name, 'อัญเชิญ "ไดโนกาฬสินธุ์" Cost ≤3',
+      async c => { if (A.roomFor(p, c.card)) await A.summonFrom(p, [], c, { jutti: false }); else { A.deck(p).push(c); A.shuffleDeck(p); } });
+  };
+  E['BT04-010'].onAttack = async (A, p) => {
+    const d = A.deck(p); const seen = d.splice(0, Math.min(kapomScout(A, p, 5), d.length));
+    A.log(`${A.state.players[p].name} สอดแนม ${seen.length} ใบ`);
+    while (A.roomFor(p)) {
+      const v = await A.choose(p, 'อัญเชิญ จุติ Avatar {กะปอม} (กี่ใบก็ได้)', seen.filter(c => isAvatar(c.card) && c.card.symbol === KAPOM).map(c => A.cardOpt(c)), true);
+      const c = seen.find(x => x.uid === v); if (!c) break;
+      seen.splice(seen.indexOf(c), 1); await A.summonFrom(p, [], c, { jutti: true });
+    }
+    await zoicFromScout(A, p, seen);
+    d.push(...seen); A.shuffleDeck(p);
+  };
+  E['BT03-012'].onPaidAsCost = async (A, p) => {
+    const d = A.deck(p); const seen = d.splice(0, Math.min(kapomScout(A, p, 1), d.length)); if (!seen.length) return;
+    await zoicFromScout(A, p, seen);
+    const top = [], bottom = [];
+    for (const c of seen) { const v = await A.choose(p, `สอดแนม: "${c.card.name}" — วางไว้ที่ไหน`, [{ label: 'ไว้บนสุดเหมือนเดิม', value: 0, score: A.cardOpt(c).score > 4 ? 1 : 0 }, { label: 'ไว้ใต้ Deck', value: 1, score: 0.5 }]); (v === 1 ? bottom : top).push(c); }
+    d.unshift(...top); d.push(...bottom);
+  };
+  // เฮล่า: also when brought to the hand by a purple {เทพ} Avatar (โอดิน)
+  const helaSummon = async (A, p, c, src, zone) => {
+    if (!src || !purpleGod(src.card) || !A.state.land || A.state.land.card.name !== 'แอสการ์ดคือสถานที่ไม่ใช่ผู้คน' || !A.avatars(p).some(a => purpleGod(a.card)) || !A.roomFor(p, c.card) || !zone.includes(c)) return;
+    if (await askYes(A, p, `${c.card.name}: อัญเชิญลงสนามทันทีโดยไม่ต้องจ่าย Cost?`, 2)) await A.summonFrom(p, zone, c, { jutti: false });
+  };
+  E['BT05-026'].onMilled = async (A, p, c, src) => helaSummon(A, p, c, src, A.hell(p));
+  E['BT02-019'].onSummon = async (A, p, self) => {
+    if (A.deck(p).length <= 9) return;
+    if (!await askYes(A, p, 'โอดิน: ธรณีสูบ 9 ใบ เพื่อนำ Avatar {เทพ} จาก Deck ขึ้นมือ?', A.deck(p).length > 25 ? 1 : -1)) return;
+    await A.mill(p, 9, self); if (A.state.winner != null) return;
+    const c = await A.pickFrom(p, A.deck(p), x => isAvatar(x) && x.symbol === 'เทพ', 'นำ Avatar {เทพ} จาก Deck ขึ้นมือ', true);
+    if (c) A.toHand(p, A.takeFrom(A.deck(p), c)); A.shuffleDeck(p);
+    if (c && A_named(c.card, 'เฮล่า')) await helaSummon(A, p, c, self, A.hand(p));
+  };
+  // พี่วัฒน์ BGN option 3: control lasts until the end of the owner's next Draw Phase
+  {
+    const wat = E['BT07-027']; const orig = wat.onSummon;
+    wat.onSummon = async (A, p, self) => {
+      const before = new Set(A.avatars(0).concat(A.avatars(1)).filter(a => a.returnAtEnd).map(a => a.uid));
+      await orig(A, p, self);
+      for (const a of A.avatars(0).concat(A.avatars(1))) if (a.returnAtEnd && !before.has(a.uid) && a.trueOwner != null) {
+        a.returnAtEnd = false; const home = a.trueOwner;
+        A.atDrawPhase(home, 1, async A2 => { if (A2.onField(a) && a.owner !== home) A2.takeControl(a, home, false, true); });
+      }
+    };
+  }
+  // นักข่าวสาว เดย์วัน: the opponent's top Deck card is shown face up while we have a "ตำรวจ" (UI)
+  E['BT10-045'].revealTop = (st, a, q) => q !== a.owner && st.players[a.owner].avatars.some(y => A_named(y.card, COP));
+  // บัญชีหนังหมา: the name taken can never pay for a summon this game
+  E['SD03-017'] = { magic: async (A, p) => {
+    const c = await A.pickFrom(p, A.deck(p), x => isAvatar(x) && A_named(x, NIRAYA) && (x.cost || 0) <= 4, 'นำ "นายนิรยบาล" Cost ≤4 ขึ้นมือ', true);
+    if (c) { A.toHand(p, A.takeFrom(A.deck(p), c)); if (A.hand(p).includes(c)) { const pl = A.state.players[p]; (pl.noCostNames = pl.noCostNames || []).push(c.card.name); A.log(`"${c.card.name}" ใช้เป็น Cost อัญเชิญไม่ได้จนจบเกม`); } }
+    A.shuffleDeck(p);
+  } };
+  // วัดคู่บ้านคู่เมือง: our Constructs' สอดแนม look at 2 more cards
+  E['SD06-019'] = {};
+  E['SD06-020'] = { onLifeFlipped: async (A, p, cs) => {
+    if (A.avatars(p).length || cs.lifeTurn === A.state.turn || !A.hand(p).length) return; cs.lifeTurn = A.state.turn;
+    if (await askYes(A, p, 'กำแพงด่านสุดท้าย: ทิ้ง 1 ใบ เพื่อสอดแนม?', 1) == null) return;
+    await A.discard(p, 1);
+    const seen = A.deck(p).splice(0, Math.min(1 + templeBonus(A, p), A.deck(p).length));
+    for (const c of seen) { A.log(`สอดแนม "${c.card.name}"`); if (isAvatar(c.card) && campTxt(c.card) && (c.card.cost || 0) <= 4 && A.roomFor(p, c.card)) await A.summonFrom(p, [], c, { jutti: false }); else A.toHand(p, c); }
+  } }; // กำแพงด่านสุดท้าย
+  // ไม่นะ ทองเหม็น!: +1 for our Constructs from the start of the opponent's next Battle Phase until that turn ends
+  E['SD06-022'] = { life: async (A, p) => { A.state.players[p].constructBoostNext = true; A.log('ช่วงเริ่ม Battle Phase ถัดไปของฝ่ายตรงข้าม: Construct ฝ่ายเรา POWER +1'); } };
+  // เณรคู: only our "ค่ายบางระจัน" Avatars are out of reach of the opponent's React Magic
+  Object.assign(E['BT08-003'], {
+    activateLabel: 'ทิ้ง 1 ใบ: Avatar "ค่ายบางระจัน" ไม่รับผล React Magic ของอีกฝ่ายจนจบเทิร์น',
+    activate: async (A, p) => { await A.discard(p, 1); A.state.players[p].campShieldTurn = A.state.turn; A.log('Avatar ที่มี "ค่ายบางระจัน" ในข้อความ ไม่รับผล React Magic ของอีกฝ่ายจนจบเทิร์น'); },
+  });
+
+  function templeBonus(A, p) { return A.constructs(p).some(c => c.card.name === 'วัดคู่บ้านคู่เมือง') ? 2 : 0; }
+
   // Reprints (same card name in a later set) use the implementation of the original printing
   (function () {
     const norm = t => String(t || '').replace(/\([^)]*\)/g, '').replace(/#.*$/gm, '').replace(/[\s.,:;!"'“”‘’\-–—]/g, '');

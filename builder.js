@@ -67,11 +67,13 @@
       return null;
     }
     if (mainTotal() >= 50) return 'Main Deck ครบ 50 ใบแล้ว';
+    const cards = byId();
     if (c.onlyOne) {
-      const cards = byId();
-      if (Object.keys(deck.main).some(id => deck.main[id] && cards[id] && cards[id].onlyOne)) return 'ใส่การ์ด Only #1 ได้แค่ 1 ใบต่อ Deck';
+      const other = Object.keys(deck.main).map(id => deck.main[id] && cards[id]).find(o => o && o.onlyOne && o.name !== c.name);
+      if (other) return `ใส่การ์ด Only #1 ได้แค่ 1 แบบต่อ Deck (มี "${other.name}" อยู่แล้ว)`;
     }
-    const lim = Decks().limitOf(c);
+    // same name in other printings: the strictest limit wins (ตึก is Only #1 in one set and not in another)
+    const lim = Object.keys(deck.main).reduce((m, id) => deck.main[id] && cards[id] && cards[id].name === c.name ? Math.min(m, Decks().limitOf(cards[id])) : m, Decks().limitOf(c));
     if (nameCount(c.name) >= lim) return `"${c.name}" ใส่ได้ไม่เกิน ${lim} ใบ`;
     return null;
   }
@@ -120,7 +122,7 @@
 
   function renderStatus() {
     const v = Decks().validate(deck);
-    $('#bStatus').innerHTML = `<span class="${v.total === 50 ? 'ok' : ''}">Main ${v.total}/50</span><span class="${v.only === 1 ? 'ok' : ''}">Only #1 ${v.only}/1</span><span class="${v.lifeCount === 5 ? 'ok' : ''}">LIFE ${v.lifeCount}/5</span>` +
+    $('#bStatus').innerHTML = `<span class="${v.total === 50 ? 'ok' : ''}">Main ${v.total}/50</span><span class="${v.only === 1 || v.allFifty ? 'ok' : v.only > 1 ? 'warn' : ''}" title="${UI().esc(v.onlyName || 'ยังไม่มีการ์ด Only #1')}">Only #1 ${v.only}/1${v.onlyCopies > v.only ? ` (${v.onlyCopies} ใบ)` : ''}</span><span class="${v.lifeCount === 5 ? 'ok' : ''}">LIFE ${v.lifeCount}/5</span>` +
       (v.ok ? '<span class="ok">✓ พร้อมเล่น</span>' : `<span class="warn">${UI().esc(v.problems[0])}</span>`);
   }
 
@@ -144,6 +146,7 @@
       el.addEventListener('mouseenter', () => { preview = c; renderPreview(); });
       const b = document.createElement('div'); b.className = 'incount hidden';
       w.append(el, b);
+      if (c.onlyOne) { const t = document.createElement('div'); t.className = 'onlytag'; t.textContent = 'Only #1'; w.appendChild(t); }
       box.appendChild(w);
       poolEls[c.id] = { el, b, c };
     });
@@ -158,29 +161,35 @@
     });
   }
 
+  // Cards already in the deck, shown as card pictures grouped by type, with a copy count and −/+ buttons
   function renderList() {
     const cards = byId();
     const box = $('#bList'); box.innerHTML = '';
     const rows = Object.entries(deck.main).filter(([id, n]) => n && cards[id]).map(([id, n]) => ({ c: cards[id], n }))
       .concat(deck.life.filter(id => cards[id]).map(id => ({ c: cards[id], n: 1 })))
       .sort((a, b) => TYPE_ORDER[a.c.type] - TYPE_ORDER[b.c.type] || (a.c.cost || 0) - (b.c.cost || 0) || a.c.name.localeCompare(b.c.name, 'th'));
-    let lastType = null;
+    let grid = null, lastType = null;
     rows.forEach(({ c, n }) => {
       if (c.type !== lastType) {
         lastType = c.type;
         const total = rows.filter(r => r.c.type === c.type).reduce((s, r) => s + r.n, 0);
         const h = document.createElement('div'); h.className = 'lhead'; h.textContent = (c.type === 'life' ? 'LIFE' : c.type === 'magic' ? 'Magic' : c.type === 'construct' ? 'Construct' : 'Avatar') + ` (${total})`; box.appendChild(h);
+        grid = document.createElement('div'); grid.className = 'lgrid'; box.appendChild(grid);
       }
-      const r = document.createElement('div'); r.className = 'lrow';
-      const cost = c.type === 'avatar' || c.type === 'construct' ? `<b class="lc c-${c.color}">${c.cost}</b>` : `<b class="lc">${c.type === 'magic' ? (MT_TH[c.magicType] || 'M')[0] : 'L'}</b>`;
-      r.innerHTML = `${cost}<span class="ln">${UI().esc(c.name)}${c.onlyOne ? ' <i>Only#1</i>' : ''}</span><span class="lx">×${n}</span>`;
-      const minus = document.createElement('button'); minus.className = 'small'; minus.textContent = '−'; minus.setAttribute('aria-label', 'เอาออก 1 ใบ'); minus.onclick = e => { e.stopPropagation(); removeOne(c.id); };
-      const plus = document.createElement('button'); plus.className = 'small'; plus.textContent = '+'; plus.setAttribute('aria-label', 'เพิ่ม 1 ใบ'); plus.disabled = !!canAdd(c); plus.onclick = e => { e.stopPropagation(); add(c); };
-      r.append(minus, plus);
-      r.onclick = () => { preview = c; renderPreview(); };
-      box.appendChild(r);
+      const w = document.createElement('div'); w.className = 'lcard'; w.title = c.name;
+      const el = UI().cardEl(c, { lazy: true, onclick: () => { preview = c; renderPreview(); } });
+      el.addEventListener('mouseenter', () => { preview = c; renderPreview(); });
+      const cnt = document.createElement('div'); cnt.className = 'incount'; cnt.textContent = '×' + n;
+      w.append(el, cnt);
+      if (c.onlyOne) { const t = document.createElement('div'); t.className = 'onlytag'; t.textContent = 'Only #1'; w.appendChild(t); }
+      const btns = document.createElement('div'); btns.className = 'lbtns';
+      const minus = document.createElement('button'); minus.className = 'small'; minus.textContent = '−'; minus.setAttribute('aria-label', `เอา ${c.name} ออก 1 ใบ`); minus.onclick = e => { e.stopPropagation(); removeOne(c.id); };
+      const plus = document.createElement('button'); plus.className = 'small'; plus.textContent = '+'; plus.setAttribute('aria-label', `เพิ่ม ${c.name} 1 ใบ`); plus.disabled = !!canAdd(c); plus.title = canAdd(c) || ''; plus.onclick = e => { e.stopPropagation(); add(c); };
+      btns.append(minus, plus);
+      w.appendChild(btns);
+      grid.appendChild(w);
     });
-    if (!rows.length) box.innerHTML = '<div class="empty">แตะการ์ดทางซ้ายเพื่อใส่ลง Deck<br>ต้องมี Main 50 ใบ (Only #1 1 ใบ, ชื่อเดียวกันไม่เกิน 4) และ LIFE 5 ใบชื่อไม่ซ้ำ</div>';
+    if (!rows.length) box.innerHTML = '<div class="empty">แตะการ์ดทางซ้ายเพื่อใส่ลง Deck<br>ต้องมี Main 50 ใบ (Only #1 1 แบบ, ชื่อเดียวกันไม่เกิน 4) และ LIFE 5 ใบชื่อไม่ซ้ำ</div>';
   }
 
   function renderPreview() {

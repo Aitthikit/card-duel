@@ -31,26 +31,32 @@
 
   const limitOf = c => c.limit || (c.onlyOne ? 1 : MAX_COPIES);
   // Rule Book: 50 cards, max 4 per name (or the card's own limit), exactly one "Only #1" card, LIFE 5 with distinct names.
+  // Only #1 means one kind of card (Avatar, Magic or Construct): normally 1 copy, but a card's own limit can allow more (พระไตรปิฎก: 3).
+  // A deck made of all 50 copies of a "50 per Deck" card may leave out the Only #1 card.
   function validate(deck) {
     const cards = byId();
     const problems = [];
-    let total = 0, only = 0;
-    const perName = {}, nameLimit = {};
+    let total = 0, onlyCopies = 0;
+    const perName = {}, nameLimit = {}, onlyNames = new Set();
     Object.entries(deck.main || {}).forEach(([id, n]) => {
       const c = cards[id];
       if (!c || !n) return;
       total += n;
-      if (c.onlyOne) only += n;
+      if (c.onlyOne) { onlyNames.add(c.name); onlyCopies += n; }
       perName[c.name] = (perName[c.name] || 0) + n;
       nameLimit[c.name] = Math.min(nameLimit[c.name] || Infinity, limitOf(c));
     });
     if (total !== MAIN_SIZE) problems.push(`Main Deck ต้องมี ${MAIN_SIZE} ใบพอดี (ตอนนี้ ${total})`);
-    if (only !== 1) problems.push(`ต้องมีการ์ด Only #1 1 ใบพอดี (ตอนนี้ ${only})`);
+    const only = onlyNames.size;
+    const names = Object.keys(perName);
+    const allFifty = total === MAIN_SIZE && names.length === 1 && nameLimit[names[0]] >= MAIN_SIZE;
+    if (only > 1) problems.push(`ใส่การ์ด Only #1 ได้แค่ 1 แบบ (ตอนนี้ ${only} แบบ: ${[...onlyNames].join(', ')})`);
+    else if (!only && !allFifty) problems.push('ต้องมีการ์ด Only #1 1 ใบ (ตอนนี้ยังไม่มี)');
     Object.entries(perName).forEach(([nm, n]) => { if (n > nameLimit[nm]) problems.push(`"${nm}" ใส่ได้ไม่เกิน ${nameLimit[nm]} ใบ (ตอนนี้ ${n})`); });
     const life = (deck.life || []).filter(id => cards[id]);
     if (life.length !== LIFE_SIZE) problems.push(`LIFE Deck ต้องมี ${LIFE_SIZE} ใบ (ตอนนี้ ${life.length})`);
     if (new Set(life.map(id => cards[id].name)).size !== life.length) problems.push('LIFE Card ต้องมีชื่อไม่ซ้ำกัน');
-    return { ok: !problems.length, problems, total, only, lifeCount: life.length };
+    return { ok: !problems.length, problems, total, only, onlyCopies, onlyName: [...onlyNames][0] || null, allFifty, lifeCount: life.length };
   }
 
   // Expand to card objects for the engine
