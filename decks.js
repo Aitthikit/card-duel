@@ -67,11 +67,76 @@
     return { deck: main, life: deck.life.map(id => cards[id]).filter(Boolean) };
   }
 
-  function exportText(deck) { return JSON.stringify({ name: deck.name, main: deck.main, life: deck.life }); }
+  // Text format used by bottcg.com (and our export):
+  //   # Deck name
+  //   # Main Deck
+  //   2x BT09-006-SR
+  //   # Life Cards
+  //   1x KD02-022-C
+  // The suffix after the card number (-C, -R, -SR, -UR, -SCR, -PR ...) is only the printing, so it maps to the base card id.
+  // The full codes are kept in deck.codes so an export gives back the same lines.
+  const CODE_RE = /^([A-Z]{2,4}\d{0,2}-\d{3}[A-Z]?)(?:-([A-Z0-9]+))?$/i;
+  function baseId(code, cards) {
+    code = String(code).trim().toUpperCase();
+    if (cards[code]) return code;
+    const m = code.match(CODE_RE);
+    if (m && cards[m[1]]) return m[1];
+    // fall back: drop the last "-XXX" piece until something matches
+    const parts = code.split('-');
+    while (parts.length > 2) { parts.pop(); if (cards[parts.join('-')]) return parts.join('-'); }
+    return null;
+  }
+
+  function exportText(deck) {
+    const code = id => (deck.codes && deck.codes[id]) || id;
+    const order = (a, b) => a.localeCompare(b);
+    const main = Object.keys(deck.main || {}).filter(id => deck.main[id] > 0).sort(order).map(id => `${deck.main[id]}x ${code(id)}`);
+    const lifeCount = {};
+    (deck.life || []).forEach(id => { lifeCount[id] = (lifeCount[id] || 0) + 1; });
+    const life = Object.keys(lifeCount).sort(order).map(id => `${lifeCount[id]}x ${code(id)}`);
+    return `# ${deck.name || 'Deck'}\n\n# Main Deck\n${main.join('\n')}\n\n# Life Cards\n${life.join('\n')}\n`;
+  }
+
+  function parseList(text) {
+    const cards = byId();
+    let name = null, section = null;
+    const main = {}, life = [], codes = {}, missing = [];
+    String(text).replace(/\r/g, '').split('\n').forEach(raw => {
+      const line = raw.trim();
+      if (!line) return;
+      if (line.startsWith('#') || line.startsWith('//')) {
+        const h = line.replace(/^(#+|\/\/)\s*/, '').trim();
+        const k = h.toLowerCase();
+        if (/^main/.test(k) || k === 'deck' || k === 'เด็ค' || k === 'เด็คหลัก') section = 'main';
+        else if (/^life/.test(k) || k === 'ไลฟ์') section = 'life';
+        else if (name === null && h) name = h;
+        return;
+      }
+      const m = line.match(/^(\d+)\s*[xX×]?\s+(\S+)/) || line.match(/^(\S+)\s+[xX×]?\s*(\d+)$/);
+      let n, code;
+      if (!m) { n = 1; code = line.split(/\s+/)[0]; }
+      else if (/^\d+$/.test(m[1])) { n = +m[1]; code = m[2]; }
+      else { code = m[1]; n = +m[2]; }
+      const id = baseId(code, cards);
+      if (!id) { missing.push(line); return; }
+      codes[id] = code.toUpperCase();
+      const isLife = section ? section === 'life' : cards[id].type === 'life';
+      if (isLife) for (let k = 0; k < n; k++) life.push(id);
+      else main[id] = (main[id] || 0) + n;
+    });
+    if (!Object.keys(main).length && !life.length && !missing.length) throw new Error('ไม่พบรายการการ์ด');
+    return { name: (name || 'Deck นำเข้า').slice(0, 60), main, life, codes, missing };
+  }
+
+  // Accepts the bottcg text list above, or the older JSON export
   function importText(text) {
-    const d = JSON.parse(text);
-    if (!d || typeof d.main !== 'object' || !Array.isArray(d.life)) throw new Error('รูปแบบไม่ถูกต้อง');
-    return { name: String(d.name || 'Deck นำเข้า').slice(0, 60), main: d.main, life: d.life };
+    const t = String(text || '').trim();
+    if (t.startsWith('{')) {
+      const d = JSON.parse(t);
+      if (!d || typeof d.main !== 'object' || !Array.isArray(d.life)) throw new Error('รูปแบบไม่ถูกต้อง');
+      return { name: String(d.name || 'Deck นำเข้า').slice(0, 60), main: d.main, life: d.life, missing: [] };
+    }
+    return parseList(t);
   }
 
   root.TCDecks = { MAIN_SIZE, LIFE_SIZE, MAX_COPIES, all, get, save, remove, validate, expand, exportText, importText, builtins, byId, limitOf };

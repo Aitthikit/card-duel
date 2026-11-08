@@ -202,13 +202,26 @@
     const m = $('#modal');
     $('#modalTitle').textContent = 'นำเข้า / ส่งออก Deck';
     $('#modalBody').innerHTML = `<div class="io"><p>ส่งออก Deck "${esc(d ? d.name : '')}" — คัดลอกข้อความนี้เก็บไว้ หรือส่งให้เพื่อน</p>
-      <textarea id="ioOut" readonly rows="4">${esc(d ? Decks.exportText(d) : '')}</textarea>
-      <p>นำเข้า — วางข้อความ Deck ที่คัดลอกมา แล้วกด "นำเข้า"</p><textarea id="ioIn" rows="4" placeholder='{"name":"...","main":{...},"life":[...]}'></textarea></div>`;
+      <textarea id="ioOut" readonly rows="8">${esc(d ? Decks.exportText(d) : '')}</textarea>
+      <p>นำเข้า — วางรายการ Deck ที่คัดลอกจากเว็บ bottcg (หรือข้อความที่ส่งออกจากเกมนี้) แล้วกด "นำเข้า"</p><textarea id="ioIn" rows="8" placeholder="# ชื่อ Deck&#10;&#10;# Main Deck&#10;4x BT09-006-SR&#10;...&#10;&#10;# Life Cards&#10;1x KD02-022-C"></textarea></div>`;
     const f = $('#modalFoot'); f.innerHTML = '';
     const copy = document.createElement('button'); copy.textContent = 'คัดลอกข้อความส่งออก';
     copy.onclick = () => { const t = $('#ioOut'); navigator.clipboard && navigator.clipboard.writeText(t.value).then(() => toast('คัดลอกแล้ว'), () => { t.select(); toast('กด Ctrl+C เพื่อคัดลอก'); }); if (!navigator.clipboard) t.select(); };
     const imp = document.createElement('button'); imp.className = 'primary'; imp.textContent = 'นำเข้า';
-    imp.onclick = () => { try { const nd = Decks.save(Decks.importText($('#ioIn').value)); m.classList.add('hidden'); fillDeckSelects(); if (nd) { $('#myDeck').value = nd.id; renderDeckInfo(); } toast('นำเข้า Deck แล้ว'); } catch (e) { toast('นำเข้าไม่ได้: ข้อความไม่ใช่ Deck ที่ถูกต้อง'); } };
+    imp.onclick = () => {
+      let d2;
+      try { d2 = Decks.importText($('#ioIn').value); } catch (e) { return toast('นำเข้าไม่ได้: ข้อความไม่ใช่ Deck ที่ถูกต้อง'); }
+      const missing = d2.missing || []; delete d2.missing;
+      const nd = Decks.save(d2);
+      if (!nd) return toast('บันทึกไม่ได้ (เบราว์เซอร์ปิดการเก็บข้อมูลไว้)');
+      fillDeckSelects(); $('#myDeck').value = nd.id; renderDeckInfo();
+      const v = Decks.validate(nd);
+      if (!missing.length && v.ok) { m.classList.add('hidden'); return toast(`นำเข้า "${nd.name}" แล้ว`); }
+      $('#modalBody').innerHTML = `<div class="io"><p>นำเข้า "${esc(nd.name)}" แล้ว แต่มีเรื่องที่ต้องดู:</p>` +
+        (missing.length ? `<p>ไม่พบการ์ดเหล่านี้ในเกม (${missing.length} บรรทัด) จึงข้ามไป:</p><textarea readonly rows="${Math.min(8, missing.length + 1)}">${esc(missing.join('\n'))}</textarea>` : '') +
+        (v.ok ? '' : `<p>Deck ยังไม่ครบตามกฎ: ${esc(v.problems.join(' · '))} — กด "แก้ไข Deck ของคุณ" เพื่อแก้ก่อนเล่น</p>`) + '</div>';
+      f.innerHTML = ''; f.append(close);
+    };
     const close = document.createElement('button'); close.textContent = 'ปิด'; close.onclick = () => m.classList.add('hidden');
     f.append(close, copy, imp);
     m.classList.remove('hidden');

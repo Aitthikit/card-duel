@@ -16,8 +16,8 @@
   function open(src, cb) {
     onDone = cb;
     deck = src
-      ? { id: src.builtin ? null : src.id, name: src.builtin ? src.name.replace(' (Starter)', '') + ' (แก้ไข)' : src.name, main: Object.assign({}, src.main), life: src.life.slice() }
-      : { id: null, name: 'Deck ใหม่', main: {}, life: [] };
+      ? { id: src.builtin ? null : src.id, name: src.builtin ? src.name.replace(' (Starter)', '') + ' (แก้ไข)' : src.name, main: Object.assign({}, src.main), life: src.life.slice(), codes: Object.assign({}, src.codes || {}) }
+      : { id: null, name: 'Deck ใหม่', main: {}, life: [], codes: {} };
     preview = null;
     $('#start').classList.add('hidden');
     $('#builder').classList.remove('hidden');

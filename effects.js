@@ -3476,7 +3476,8 @@
   const isMango = c => isAvatar(c) && A_named(c, MANGO) && c.symbol === 'ต้นไม้';
   const parkMango = (A, p, inst) => { A.park(inst, p); if (inst.card.id === 'BT10-039') inst.grantFx = 'BT10-039p'; };
   const mangoInMZ = (A, p) => A.parked(p).filter(m => isMango(m.card));
-  const mangoLastWill = async (A, p, self) => { if (self.destroyedBy != null && self.destroyedBy !== p && A.hell(p).includes(self)) parkMango(A, p, self); };
+  // "ถ้าถูกทำลายโดยการ์ดฝ่ายตรงข้าม หรือการ์ด มะม่วง": our own มะม่วง cards count too (ไปคุยกับรากมะม่วง)
+  const mangoLastWill = async (A, p, self) => { const byMango = self.byMango; self.byMango = false; if (((self.destroyedBy != null && self.destroyedBy !== p) || byMango) && A.hell(p).includes(self)) parkMango(A, p, self); };
   // declare the type of the opponent's top card, then look at it
   const declareTopCard = async (A, p) => {
     const o = A.opp(p), top = A.deck(o)[0]; if (!top) return null;
@@ -3823,7 +3824,7 @@
   };
   E['BT10-061'] = { canUse: (A, p) => A.hand(p).length > 0, magic: async (A, p) => { await A.discard(p, 1); await lookTopBottom(A, p, 3, [{ pred: c => isAvatar(c) && A_named(c, 'นารายณ์') && c.symbol === 'เทพ' && (c.cost || 0) <= 6, title: 'นำ "นารายณ์" {เทพ} ขึ้นมือ' }], async c => A.toHand(p, c)); } }; // นารายณ์ 10 ปาง
   E['BT10-062'] = { canUse: (A, p) => A.avatars(p).some(x => A.named(x.card, SEWAGE)), magic: async (A, p) => { const xs = A.avatars(p).filter(x => A.named(x.card, SEWAGE)); const v = await A.choose(p, 'เซ่นไหว้ "สิ่งปฏิกูล"', xs.map(x => A.avOpt(x, 1))); await A.sacrifice(p, xs.find(x => x.uid === v) || xs[0]); A.draw(p, 3); await A.discard(p, 1); } }; // ทะลวงส้วม
-  const mangoRoots = async (A, p) => { const xs = A.avatars(p).filter(x => isMango(x.card)); const v = await A.choose(p, 'ทำลาย "มะม่วง" ของเรา', xs.map(x => A.avOpt(x, -A.power(x)))); const x = xs.find(y => y.uid === v) || xs[0]; if (!x) return; await A.destroy(x, 'ไปคุยกับรากมะม่วง'); await destroyAnyFieldCard(A, p); };
+  const mangoRoots = async (A, p) => { const xs = A.avatars(p).filter(x => isMango(x.card)); const v = await A.choose(p, 'ทำลาย "มะม่วง" ของเรา', xs.map(x => A.avOpt(x, -A.power(x)))); const x = xs.find(y => y.uid === v) || xs[0]; if (!x) return; x.byMango = true; await A.destroy(x, 'ไปคุยกับรากมะม่วง', p); x.byMango = false; await destroyAnyFieldCard(A, p); };
   E['BT10-063'] = { magic: mangoRoots, canUse: (A, p) => A.avatars(p).some(x => isMango(x.card)), react: { on: 'attack', when: (A, p) => A.avatars(p).some(x => isMango(x.card)), botScore: () => 0.5, run: mangoRoots } }; // ไปคุยกับรากมะม่วง
   const onlyNinjas = (A, p) => A.avatars(p).length > 0 && A.avatars(p).every(x => A.named(x.card, NINJA));
   E['BT10-064'] = { // วิชานินจา ผนึกเงา
