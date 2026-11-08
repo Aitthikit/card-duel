@@ -264,6 +264,7 @@
   function mustAttack(state, a) {
     const f = FX(a.card.id); const A = api(state);
     if (f && f.mustAttack && !a.lostAbilities && f.mustAttack(A, a)) return true;
+    if (a.mustAttackTurn === state.turn) return true;
     return attachedTo(state, a).some(m => { const mf = FX(m.card.id); return mf && mf.mustAttackHost && mf.mustAttackHost(A, m, a); });
   }
   async function forcedAttacks(state, p) {
@@ -302,11 +303,15 @@
     const lf = state.land && FX(state.land.card.id);
     let cost = fx && fx.handCost ? Math.max(0, fx.handCost(A, p, card)) : (card.cost || 0);
     if (lf && lf.handCostMod) cost = Math.max(0, cost + lf.handCostMod(A, p, card));
+    if (card.type === 'avatar') for (const src of state.players[p].avatars) { const f = FX(src.card.id); if (f && f.allyHandCost && !src.lostAbilities) cost = Math.max(0, cost + (f.allyHandCost(A, p, src, card) || 0)); }
+    let hellPool = null, fullCost = cost;
+    if (card.type === 'avatar') for (const src of state.players[p].avatars) { const f = FX(src.card.id); if (f && f.hellGemFor && !src.lostAbilities && f.hellGemFor(A, p, src, card)) { hellPool = state.players[p].hell.filter(h => f.hellGemOk(A, p, h.card) && gemTotal(h.card) > 0); break; } }
+    if (hellPool && hellPool.length) cost = Math.max(0, cost - hellPool.reduce((s, h) => s + gemTotal(h.card), 0)); else hellPool = null;
     const anyColor = pc => !!(lf && lf.colorlessGem && lf.colorlessGem(pc)) || state.players[p].avatars.some(a => { const f = FX(a.card.id); return f && f.colorlessGem && !a.lostAbilities && f.colorlessGem(pc); }) || !!((FX(pc.id) || {}).anyColorFor && FX(pc.id).anyColorFor(card));
     if (state.players[p].alienPact && card.type === 'avatar' && /ตัวอะไร[สซ]ักอย่าง/.test(card.name || '')) cost = Math.max(Math.min(cost, 2), cost - 2);
     const gem = pc => { if (card.type === 'avatar' && (state.players[p].noCostNames || []).includes(pc.name)) return 0; const pf = FX(pc.id); const v = pf && pf.gemAs ? pf.gemAs(A, p, pc, card) : null; return v != null ? v : gemBase(pc); };
     const gemBase = pc => (card.type === 'construct' && (FX(pc.id) || {}).constructGem) ? FX(pc.id).constructGem : (lf && lf.powerAsGem && card.symbol === lf.powerAsGem && pc.type === 'avatar' && pc.symbol === lf.powerAsGem ? Math.max(gemTotal(pc), pc.power || 0) : gemTotal(pc));
-    return { cost, gem, anyColor };
+    return { cost, gem, anyColor, hellPool, fullCost };
   }
   function checkPayment(card, payCards, ctx) {
     const cost = ctx ? ctx.cost : (card.cost || 0);
@@ -373,6 +378,7 @@
     if (pl.summonOnly && pl.summonOnly.turn === state.turn && card.symbol !== pl.summonOnly.symbol) return `เทิร์นนี้อัญเชิญได้แค่ Avatar {${pl.summonOnly.symbol}}`;
     if (pl.summonOnlyName && pl.summonOnlyName.turn === state.turn && !named(card, pl.summonOnlyName.word)) return `เทิร์นนี้อัญเชิญได้แค่ Avatar "${pl.summonOnlyName.word}"`;
     if (pl.alienPact && card.type === 'avatar' && !(card.color === 'blue' && card.symbol === 'เอเลี่ยน')) return 'เกมนี้อัญเชิญได้แค่ Avatar {เอเลี่ยน} สีฟ้า';
+    if (pl.dragonOnly && card.type === 'avatar' && !(card.symbol === 'มังกร' || named(card, 'ผู้ฝึกมังกร'))) return 'เกมนี้อัญเชิญได้แค่ "ผู้ฝึกมังกร" หรือ Avatar {มังกร}';
     if (pl.avatars.some(a => (FX(a.card.id) || {}).soloOnly && !a.lostAbilities)) return 'ควบคุม Avatar ใบอื่นไม่ได้ (เนฟิล)';
     if (state.land && (FX(state.land.card.id) || {}).summonCap && pl.summonLog && pl.summonLog.turn === state.turn && pl.summonLog.names.length >= FX(state.land.card.id).summonCap) return `อัญเชิญได้แค่ ${FX(state.land.card.id).summonCap} ครั้งต่อเทิร์น (Land)`;
     { const f = FX(card.id); if (f && f.uniqueOnField && pl.avatars.some(a => a.card.name === card.name)) return `ควบคุม "${card.name}" ได้แค่ 1 ใบ`; }
@@ -403,10 +409,15 @@
     const c = canSummon(state, p, handIdx, payIdxs); if (!c.ok) return c;
     const pl = state.players[p];
     const ctx = payCtx(state, p, pl.hand[handIdx].card);
-    const exact = payIdxs.reduce((n, i) => n + ctx.gem(pl.hand[i].card), 0) === ctx.cost;
+    const paidSum = payIdxs.reduce((n, i) => n + ctx.gem(pl.hand[i].card), 0);
+    const exact = paidSum === ctx.cost;
     const [inst, ...paid] = takeFromHand(pl, [handIdx, ...payIdxs]);
     inst.exact = exact;
     pl.hell.push(...paid);
+    if (ctx.hellPool) { // the rest of the Cost is paid by exiling cards from hell (แม่นางลิ)
+      let need = ctx.fullCost - paidSum;
+      for (const h of ctx.hellPool.slice().sort((x, y) => gemTotal(y.card) - gemTotal(x.card))) { if (need <= 0) break; if (!pl.hell.includes(h) || paid.includes(h)) continue; pl.hell.splice(pl.hell.indexOf(h), 1); pl.dark.push(h); need -= gemTotal(h.card); log(state, `เนรเทศ "${h.card.name}" จากนรก ใช้ GEM ${gemTotal(h.card)} เป็น Cost`); }
+    }
     log(state, `${pl.name} อัญเชิญ ${inst.card.name} (POWER ${inst.card.power})` + (paid.length ? ` — ทิ้ง ${paid.map(x => x.card.name).join(', ')} เป็น GEM` : ''));
     state.resolving++;
     try {
@@ -706,6 +717,11 @@
       if (fx && fx.hellActivate && okNow(fx, h) && h.hellUsed !== state.turn && (!fx.canHellActivate || fx.canHellActivate(A, p, h)))
         out.push({ kind: 'hell', uid: h.uid, label: fx.hellActivateLabel || 'สั่งใช้จากนรก' });
     });
+    pl.deck.forEach(h => {
+      const fx = FX(h.card.id);
+      if (fx && fx.deckActivate && okNow(fx, h) && (!fx.canDeckActivate || fx.canDeckActivate(A, p, h)) && !out.some(o => o.kind === 'deck' && o.id === h.card.id))
+        out.push({ kind: 'deck', uid: h.uid, id: h.card.id, label: fx.deckActivateLabel || 'สั่งใช้จาก Deck' });
+    });
     pl.dark.forEach(h => {
       const fx = FX(h.card.id);
       if (fx && fx.darkActivate && okNow(fx, h) && h.darkUsed !== state.turn && (!fx.canDarkActivate || fx.canDarkActivate(A, p, h)))
@@ -751,6 +767,10 @@
         const h = pl.hell.find(x => x.uid === uid); h.hellUsed = state.turn;
         log(state, `${pl.name} สั่งใช้ "${h.card.name}" จากนรก`);
         await FX(h.card.id).hellActivate(api(state), p, h);
+      } else if (act.kind === 'deck') {
+        const h = pl.deck.find(x => x.uid === uid);
+        log(state, `${pl.name} สั่งใช้ "${h.card.name}" จาก Deck`);
+        await FX(h.card.id).deckActivate(api(state), p, h);
       } else if (act.kind === 'dark') {
         const h = pl.dark.find(x => x.uid === uid); h.darkUsed = state.turn;
         log(state, `${pl.name} สั่งใช้ "${h.card.name}" จากมิติมืด`);
@@ -791,6 +811,7 @@
       || o.constructs.some(src => { const f = FX(src.card.id); return f && f.suppressOpp && f.suppressOpp(api(state), src).includes(kind); });
   }
   function symbolOf(state, a) {
+    if (a.symOverride && a.symOverride.until >= state.turn) return a.symOverride.sym;
     let s = a.card.symbol;
     if (attachedTo(state, a).some(m => (FX(m.card.id) || {}).lockSymbol)) return s;
     for (const pl of state.players) for (const m of pl.magicZone) {
@@ -811,7 +832,7 @@
     let pw = a.card.power || 0;
     if (a.halved) pw = Math.floor(pw / 2);
     const A = api(state);
-    const guard = attachedTo(state, a).some(m => (FX(m.card.id) || {}).noPowerDown);
+    const guard = attachedTo(state, a).some(m => { const g = (FX(m.card.id) || {}).noPowerDown; return typeof g === 'function' ? g(A, a, m) : !!g; });
     const add = v => { v = v || 0; if (!(guard && v < 0)) pw += v; };
     const fx = FX(a.card.id);
     if (fx && fx.setPower && !a.lostAbilities) pw = fx.setPower(A, a.owner, a);
@@ -848,7 +869,11 @@
     state.players.forEach((pl, q) => pl.constructs.forEach(src => { const f = FX(src.card.id); if (f && f.costAura) c += f.costAura(A, q, src, a) || 0; }));
     return Math.max(0, c);
   }
-  function constructPower(state, c) { return Math.max(0, (c.card.power || 0) + (c.powerMod || 0)); }
+  function constructPower(state, c) {
+    let pw = (c.card.power || 0) + (c.powerMod || 0);
+    state.players.forEach((pl, q) => pl.avatars.forEach(src => { const f = FX(src.card.id); if (f && f.constructAura && !src.lostAbilities) pw += f.constructAura(api(state), q, src, c) || 0; }));
+    return Math.max(0, pw);
+  }
   async function destroyConstruct(state, cs, why, byP) {
     const pl = state.players.find(x => x.constructs.includes(cs)); if (!pl) return false;
     const owner = state.players.indexOf(pl);
@@ -895,7 +920,7 @@
     if (attachedTo(state, a).some(m => (FX(m.card.id) || {}).hostCannotAttack)) return [];
     const o = state.players[opp(p)];
     const A = api(state);
-    const t = o.avatars.filter(x => { const f = FX(x.card.id); return !(f && f.untargetable && !x.lostAbilities && f.untargetable(A, x, a)) && !o.avatars.some(src => { const sf2 = FX(src.card.id); return sf2 && sf2.shieldAllies && !src.lostAbilities && sf2.shieldAllies(A, src, x); }); }).map(x => ({ kind: 'avatar', uid: x.uid }));
+    const t = o.avatars.filter(x => { const f = FX(x.card.id); if ((x.noAttackUntil || 0) >= state.turn) return false; return !(f && f.untargetable && !x.lostAbilities && f.untargetable(A, x, a)) && !o.avatars.some(src => { const sf2 = FX(src.card.id); return sf2 && sf2.shieldAllies && !src.lostAbilities && sf2.shieldAllies(A, src, x); }); }).map(x => ({ kind: 'avatar', uid: x.uid }));
     o.constructs.forEach(x => { const f = FX(x.card.id); if (!(f && f.untargetableConstruct && f.untargetableConstruct(A, x, opp(p)))) t.push({ kind: 'construct', uid: x.uid }); });
     if ((o.avatars.length === 0 || hasAbility(state, a, 'เตะไข่')) && a.noLifeAttack !== state.turn && !(sf && sf.selfNoLifeAttack && !a.lostAbilities && sf.selfNoLifeAttack(A, a)) && !o.constructs.some(c => (FX(c.card.id) || {}).noLifeAttack)) t.push({ kind: 'life' });
     return t;
@@ -937,7 +962,7 @@
     const pl = state.players[p], o = state.players[opp(p)];
     const a = findAvatar(state, uid);
     const af0 = FX(a.card.id);
-    if (af0 && af0.oppChoosesTarget && !a.lostAbilities) {
+    if ((af0 && af0.oppChoosesTarget && !a.lostAbilities) || a.oppChooseTurn === state.turn) {
       const ts = attackTargets(state, p, uid);
       const severe = o.life.every(l => l.faceUp);
       const v = await state.ask(opp(p), { title: `${a.card.name}: คุณเป็นผู้เลือกเป้าหมายการโจมตี`, options: ts.map(t => t.kind === 'life' ? { label: 'LIFE Card Zone', value: 'life', score: severe ? -99 : 0.5 } : t.kind === 'construct' ? { label: o.constructs.find(x => x.uid === t.uid).card.name, value: t.uid, score: 1 } : avOpt(state, findAvatar(state, t.uid), basePower(state, findAvatar(state, t.uid)) - basePower(state, a))) });
@@ -1244,6 +1269,7 @@
       }
     }
     if (fx && fx.lastWill) await runLastWill(state, a);
+    if (a.grantLW) { const g = FX('LW:' + a.grantLW); const pl0 = state.players[a.owner]; a.grantLW = null; if (g && pl0.hell.includes(a)) await g.lastWill(api(state), a.owner, a, byP); }
     if (byP != null && byP !== a.owner) await reactWindow(state, a.owner, 'destroyedByOpp', { avatar: a, byP });
     for (const h of state.players[a.owner].hand.slice()) { const f = FX(h.card.id); if (f && f.onAllyDestroyed && state.players[a.owner].hand.includes(h)) await f.onAllyDestroyed(A, a.owner, h, a); }
   }
@@ -1346,6 +1372,7 @@
         const uids = (Array.isArray(picks) ? picks : [picks]).filter(x => x != null).slice(0, n);
         uids.forEach(u => { const i = pl.hand.findIndex(h => h.uid === u); if (i >= 0) pl.hell.push(pl.hand.splice(i, 1)[0]); });
         log(state, `${pl.name} ทิ้งการ์ด ${uids.length} ใบ`);
+        pl.lastDiscard = new Set(uids);
         if (uids.length) for (const h of pl.hell.slice()) { const f = FX(h.card.id); if (f && f.onOwnDiscard && pl.hell.includes(h)) await f.onOwnDiscard(A, p, h); }
         return uids.length;
       },
@@ -1431,7 +1458,7 @@
         const from = state.players.find(x => x.avatars.includes(a));
         if (!from || state.players.indexOf(from) === p || !hasRoom(state, p, a.card)) return false;
         if (a.linked) { log(state, `${a.card.name} อยู่ในสถานะคู่หู — ยึดการควบคุมไม่ได้`); return false; }
-        if (from.constructs.some(c => (FX(c.card.id) || {}).controlGuard)) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม (รูปประจำบ้าน)`); return false; }
+        if (from.constructs.some(c => { const g = (FX(c.card.id) || {}).controlGuard; return typeof g === 'function' ? g(A, c, from) : !!g; })) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม (รูปประจำบ้าน)`); return false; }
         const imm = FX(a.card.id);
         if (((imm && imm.controlImmune && !a.lostAbilities) || attachedTo(state, a).some(m => (FX(m.card.id) || {}).controlImmuneHost)) && !force) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม`); return false; }
         from.avatars.splice(from.avatars.indexOf(a), 1);
@@ -1463,7 +1490,7 @@
       },
       rand: n => Math.floor(rng(state) * n),
       cost: a => costOf(state, a),
-      isSym: (a, sym) => symbolOf(state, a) === sym || (FX(a.card.id) || {}).extraSymbol === sym || (!a.lostAbilities && !!(FX(a.card.id) || {}).allSymbols),
+      isSym: (a, sym) => symbolOf(state, a) === sym || (FX(a.card.id) || {}).extraSymbol === sym || (!a.lostAbilities && !!(FX(a.card.id) || {}).allSymbols) || (a.extraSyms || []).some(x => x.until >= state.turn && x.syms.includes(sym)),
       battleFoe: a => (state.inBattle && state.battlePair && state.battlePair.includes(a) ? state.battlePair.find(x => x !== a) : null),
       blockReact: q => { state.noReactFor = q; },
       queueRevive: (p, a) => { const pl = state.players[p]; (pl.revive = pl.revive || []).push({ uid: a.uid, after: state.turn }); },
