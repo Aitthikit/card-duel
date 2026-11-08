@@ -5,6 +5,9 @@
   const KEY = 'tc-duel-decks-v1';
   const MAIN_SIZE = 50, LIFE_SIZE = 5, MAX_COPIES = 4;
   const byId = () => { const m = {}; (root.TC_CARDS || []).forEach(c => { m[c.id] = c; }); return m; };
+  // Cards printed with Only #1 that the bottcg data leaves unmarked (kept here so a fresh card import doesn't lose it)
+  const ONLY1_FIX = ['BT09-071'];
+  (root.TC_CARDS || []).forEach(c => { if (ONLY1_FIX.includes(c.id)) { c.onlyOne = true; c.limit = 1; } });
 
   function builtins() {
     return Object.keys(root.TC_DECKS || {}).map(set => {
