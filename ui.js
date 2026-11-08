@@ -620,6 +620,7 @@
     const [landZ, land] = zoneBox('land', 'Land Magic', G.land && G.land.owner === p ? 'ใช้ได้ทั้งสองฝ่าย' : '');
     if (G.land && G.land.owner === p) {
       const can = actTurn() && En.activatables(G, ME).some(x => x.kind === 'land');
+      landZ.classList.add('has');
       land.appendChild(cardEl(G.land.card, { uid: G.land.uid, cls: 'mini' + (can ? ' can' : '') + (selected && selected.uid === G.land.uid ? ' sel' : ''), onclick: () => select('land', G.land) }));
     }
 
@@ -643,6 +644,11 @@
     const [magZ] = zoneBox('magic', 'Magic Zone', 'Magic ใช้ได้ประเภทละ 1 ครั้งต่อเทิร์น');
     const cols = document.createElement('div'); cols.className = 'avcols';
     const avRow = isMe ? 1 : 2, mgRow = isMe ? 2 : 1;
+    // Magic that stays on the field without a host (or whose host is on the other side) is fanned out in one
+    // strip; two flexible side columns keep the Avatars centred and give that strip room on the right
+    const loose = pl.magicZone.filter(m => !pl.avatars.some(a => a.uid === m.attachedTo));
+    const off = loose.length ? 1 : 0;
+    if (off) cols.style.gridTemplateColumns = `minmax(0, 1fr) repeat(${avMax}, max-content) minmax(0, 1fr)`;
     const cell = (cls, col, row) => { const c = document.createElement('div'); c.className = cls; c.style.gridColumn = col; c.style.gridRow = row; cols.appendChild(c); return c; };
     const magicEl = m => {
       const can = isMe && actTurn() && !mode && En.activatables(G, ME).some(x => x.uid === m.uid);
@@ -650,9 +656,9 @@
       const host = En.findAvatar(G, m.attachedTo); if (host) el.title = m.card.name + ' → ' + host.card.name;
       return el;
     };
-    const placed = new Set();
+    let lastHost = 0; // last Avatar column that has Magic attached under it
     for (let i = 0; i < avMax; i++) {
-      const a = pl.avatars[i], ac = cell('avc', i + 1, avRow);
+      const a = pl.avatars[i], ac = cell('avc', i + 1 + off, avRow);
       if (!a) { const s = document.createElement('div'); s.className = 'slot'; ac.appendChild(s); continue; }
       const eqs = En.attachedTo(G, a);
       let cls = a.rested ? 'rested' : '';
@@ -666,11 +672,14 @@
       if (focusNow && focusNow.to && focusNow.to.uid === a.uid) cls += ' focus-tgt';
       ac.appendChild(cardEl(a.card, { uid: a.uid, cls, power: En.basePower(G, a), eq: eqs.length || null, onclick: () => clickAvatar(p, a) }));
       const mine = pl.magicZone.filter(m => m.attachedTo === a.uid);
-      if (mine.length) { const mc = cell('mgc', i + 1, mgRow); mine.forEach(m => { placed.add(m.uid); mc.appendChild(magicEl(m)); }); }
+      if (mine.length) { lastHost = i + 1; const mc = cell('mgc', i + 1 + off, mgRow); mine.forEach(m => mc.appendChild(magicEl(m))); }
     }
-    // Magic that stays on the field without a host (or whose host is on the other side) gets its own columns
-    let col = avMax;
-    pl.magicZone.filter(m => !placed.has(m.uid)).forEach(m => cell('mgc', ++col, mgRow).appendChild(magicEl(m)));
+    // the loose strip starts right after the last Avatar that has Magic under it and may use the empty slots;
+    // when crowded the cards overlap like a fanned hand so the row never spills off the mat
+    if (loose.length) {
+      const lc = cell('mgc loose', `${lastHost + 1 + off} / -1`, mgRow);
+      loose.forEach(m => { const w = document.createElement('div'); w.className = 'mgs'; w.appendChild(magicEl(m)); lc.appendChild(w); });
+    }
 
     // Hell (top card face up) and Deck (card back)
     const [hellZ, hell] = zoneBox('hell', 'Hell', `นรก ${pl.hell.length}`);

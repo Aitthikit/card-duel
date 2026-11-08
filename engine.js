@@ -1535,6 +1535,7 @@
         Object.assign(inst, { parked: true, attachedTo: null, rested: false, owner: p, returnOnMain: !!o.returnOnMain });
         if (home !== p) inst.trueOwner = home; else delete inst.trueOwner;
         if (o.rename) { inst.origCard = inst.origCard || inst.card; inst.card = Object.assign({}, inst.origCard, o.rename); }
+        { const pf = FX(inst.card.id); if (pf && pf.mzFx && !inst.grantFx) inst.grantFx = pf.mzFx; }
         state.players[p].magicZone.push(inst);
         log(state, `${inst.card.name} ไปอยู่ที่ Magic Zone ของ ${state.players[p].name}`);
       },

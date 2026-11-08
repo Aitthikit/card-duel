@@ -3474,7 +3474,7 @@
   const byNamed = (A, a, word) => { const c = a.summonedBy && A.cardById(a.summonedBy); return !!(c && A.named(c, word)); };
   const supportedBySeed = s => s.card.name === SEED;
   const isMango = c => isAvatar(c) && A_named(c, MANGO) && c.symbol === 'ต้นไม้';
-  const parkMango = (A, p, inst) => { A.park(inst, p); if (inst.card.id === 'BT10-039') inst.grantFx = 'BT10-039p'; };
+  const parkMango = (A, p, inst) => { A.park(inst, p); };
   const mangoInMZ = (A, p) => A.parked(p).filter(m => isMango(m.card));
   // "ถ้าถูกทำลายโดยการ์ดฝ่ายตรงข้าม หรือการ์ด มะม่วง": our own มะม่วง cards count too (ไปคุยกับรากมะม่วง)
   const mangoLastWill = async (A, p, self) => { const byMango = self.byMango; self.byMango = false; if (((self.destroyedBy != null && self.destroyedBy !== p) || byMango) && A.hell(p).includes(self)) parkMango(A, p, self); };
@@ -3709,11 +3709,15 @@
     },
   };
   E['BT10-039'] = { // มาโกะ
-    onSummon: async (A, p) => { const names = new Set(mangoInMZ(A, p).map(m => m.card.name)); for (const c of A.hell(p).slice()) if (isMango(c.card) && !names.has(c.card.name) && c.card.id !== 'BT10-039') { names.add(c.card.name); parkMango(A, p, c); } },
+    mzFx: 'BT10-039p', // its first ability works while it sits in the Magic Zone, however it got there
+    onSummon: async (A, p) => { // any number of "มะม่วง" {ต้นไม้} from hell, each with a different name
+      const names = new Set();
+      for (;;) { const c = await A.pickFrom(p, A.hell(p), x => isMango(x) && !names.has(x.name), 'มาโกะ: นำ "มะม่วง" {ต้นไม้} จากนรกไปวางที่ Magic Zone (ชื่อไม่ซ้ำกัน)', true); if (!c) break; names.add(c.card.name); parkMango(A, p, c); }
+    },
     continuousSelf: (A, p) => A.parked(p).filter(m => m.card.name === TREE).length,
     activateLabel: 'อัญเชิญ จุติ "มะม่วง" จาก Magic Zone',
-    canActivate: (A, p) => A.roomFor(p) && mangoInMZ(A, p).length > 0,
-    activate: async (A, p) => { const xs = mangoInMZ(A, p); const v = await A.choose(p, 'อัญเชิญ จุติ "มะม่วง" จาก Magic Zone', xs.map(x => A.cardOpt(x))); const m = xs.find(x => x.uid === v) || xs[0]; const pl = A.state.players[p]; pl.magicZone.splice(pl.magicZone.indexOf(m), 1); delete m.grantFx; await A.summonFrom(p, [], m, { jutti: true }); },
+    canActivate: (A, p) => A.parked(p).some(m => isAvatar(m.card) && A_named(m.card, MANGO) && A.roomFor(p, m.card)),
+    activate: async (A, p) => { const xs = A.parked(p).filter(m => isAvatar(m.card) && A_named(m.card, MANGO) && A.roomFor(p, m.card)); const v = await A.choose(p, 'อัญเชิญ จุติ "มะม่วง" จาก Magic Zone', xs.map(x => A.cardOpt(x))); const m = xs.find(x => x.uid === v) || xs[0]; const pl = A.state.players[p]; pl.magicZone.splice(pl.magicZone.indexOf(m), 1); delete m.grantFx; await A.summonFrom(p, [], m, { jutti: true }); },
   };
   E['BT10-040'] = { // ผู้คุมกฎแห่งภาคีมะม่วง
     onSummon: async (A, p) => {
