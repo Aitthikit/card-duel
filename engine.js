@@ -150,7 +150,7 @@
     state.phase = 'draw';
     log(state, `— เทิร์น ${state.turn}: ${pl.name} —`);
     await show(state, 'turn', { p });
-    pl.avatars.forEach(a => { if (a.noUntap) a.noUntap = false; else if (a.heldBy && findAvatar(state, a.heldBy)) { /* stays asleep */ } else { a.heldBy = null; a.rested = false; } });
+    pl.avatars.forEach(a => { if (a.noUntap) a.noUntap = false; else if (a.heldBy && findAvatar(state, a.heldBy)) { /* stays asleep */ } else { a.heldBy = null; if (a.rested) pl.wokeTurn = state.turn; a.rested = false; } });
     // Draw: the starting player's first turn draws 2; otherwise 1. Either way, top the hand up to 3.
     let n = state.turn === 1 ? 2 : 1;
     if (n === 1 && pl.hand.length >= 3 && pl.avatars.some(a => (FX(a.card.id) || {}).superDraw && !a.lostAbilities)) { n = 2; log(state, 'แก๊ง Super Card: จั่ว 2 ใบแทน'); }
@@ -488,6 +488,10 @@
 
   // ----- Magic -----
   function magicType(card) { return card.magicType || 'normal'; }
+  // an Avatar that lets its controller use 1 extra Magic of a kind each turn (คุณโทนี่ เด็กช่าง Super Air)
+  function bonusMagicSrc(state, p, card) {
+    return state.players[p].avatars.find(a => { const f = FX(a.card.id); return f && f.extraMagicFor && !a.lostAbilities && !state.magicUsed[p]['xm:' + a.uid] && f.extraMagicFor(api(state), a, card); }) || null;
+  }
 
   function canCast(state, p, handIdx) {
     if (state.winner != null) return err('เกมจบแล้ว');
@@ -509,7 +513,7 @@
     if (inst.costOnly) return err('การ์ดใบนี้ใช้ได้แค่เป็น Cost');
     const wm = pl.weaponMode === state.turn && mt === 'modification';
     if (wm && !named(inst.card, EQUIP_NAME)) return err('เทิร์นนี้ใช้ได้แค่ Modification Magic "อาวุธหุ่นนักรบผู้กล้า"');
-    const extraSpell = (mt === 'normal' && state.magicUsed[p].extraSpell && named(inst.card, 'คาถา')) || (state.magicUsed[p].extraMagic && state.magicUsed[p].extraMagic !== inst.card.name);
+    const extraSpell = ((mt === 'normal' || state.magicUsed[p].extraSpellAny) && state.magicUsed[p].extraSpell && named(inst.card, 'คาถา')) || (state.magicUsed[p].extraMagic && state.magicUsed[p].extraMagic !== inst.card.name) || !!bonusMagicSrc(state, p, inst.card);
     if (!(fx && fx.unlimitedIf && fx.unlimitedIf(api(state), p)) && !extraSpell && (wm ? (state.magicUsed[p].modCount || 0) >= 2 : state.magicUsed[p][mt])) return err(`ใช้ ${mt} Magic ไปแล้วในเทิร์นนี้ (ประเภทละ 1 ครั้งต่อเทิร์น)`);
     if (!fx || !fx.magic) return err('เอฟเฟกต์ของการ์ดนี้ยังไม่รองรับในเกม — ใช้เป็น GEM ได้');
     if (fx.canUse && !fx.canUse(api(state), p)) return err('เงื่อนไขของการ์ดยังไม่ครบ');
@@ -536,8 +540,9 @@
     const pl = state.players[p];
     const mt = magicType(inst.card);
     const fx = FX(inst.card.id);
-    if (mt === 'normal' && state.magicUsed[p].normal && state.magicUsed[p].extraSpell && named(inst.card, 'คาถา')) state.magicUsed[p].extraSpell = false;
+    if ((mt === 'normal' || state.magicUsed[p].extraSpellAny) && state.magicUsed[p][mt] && state.magicUsed[p].extraSpell && named(inst.card, 'คาถา')) state.magicUsed[p].extraSpell = false;
     else if (state.magicUsed[p][mt] && state.magicUsed[p].extraMagic) state.magicUsed[p].extraMagic = false;
+    else if (state.magicUsed[p][mt]) { const b = bonusMagicSrc(state, p, inst.card); if (b) state.magicUsed[p]['xm:' + b.uid] = true; }
     state.magicUsed[p][mt] = true;
     if (mt === 'modification') state.magicUsed[p].modCount = (state.magicUsed[p].modCount || 0) + 1;
     log(state, `${pl.name} ใช้ ${mt === 'land' ? 'Land' : mt === 'react' ? 'React' : mt === 'modification' ? 'Modification' : 'Normal'} Magic "${inst.card.name}"`);
@@ -650,7 +655,7 @@
         opts.push({ label: f.handCounter.label || `ใช้ความสามารถของ ${h.card.name} จากบนมือ`, card: h.card, value: 'hc:' + h.uid, score: f.handCounter.botScore ? f.handCounter.botScore(api(state), rp, h, ctx) : 1 });
     });
     if (!opts.length) return null;
-    const what = trigger === 'summon' ? `${ctx.avatar.card.name} ถูกอัญเชิญ` : trigger === 'magic' ? `อีกฝ่ายใช้ "${ctx.card.card.name}"` : trigger === 'attack' ? `${ctx.attacker.card.name} กำลังโจมตี ${focusName(state, rp, ctx.target)}` : trigger === 'destroy' ? `${ctx.avatar.card.name} กำลังจะถูกทำลาย` : trigger === 'battleDestroyed' ? `${ctx.avatar.card.name} ถูกทำลายจากการต่อสู้` : trigger === 'destroyedByOpp' ? `${ctx.avatar.card.name} ถูกทำลายโดยอีกฝ่าย` : trigger === 'activate' ? `อีกฝ่ายสั่งใช้ความสามารถของ ${ctx.avatar.card.name}` : trigger === 'battleStart' ? 'อีกฝ่ายเริ่ม Battle Phase' : trigger === 'lastWill' ? `คำสั่งเสีย ของ ${ctx.avatar.card.name}` : trigger === 'constructDestroy' ? `${ctx.construct.card.name} กำลังจะถูกทำลาย` : trigger;
+    const what = trigger === 'summon' ? `${ctx.avatar.card.name} ถูกอัญเชิญ` : trigger === 'magic' ? `อีกฝ่ายใช้ "${ctx.card.card.name}"` : trigger === 'attack' ? `${ctx.attacker.card.name} กำลังโจมตี ${focusName(state, rp, ctx.target)}` : trigger === 'destroy' ? `${ctx.avatar.card.name} กำลังจะถูกทำลาย` : trigger === 'battleDestroyed' ? `${ctx.avatar.card.name} ถูกทำลายจากการต่อสู้` : trigger === 'destroyedByOpp' ? `${ctx.avatar.card.name} ถูกทำลายโดยอีกฝ่าย` : trigger === 'activate' ? `อีกฝ่ายสั่งใช้ความสามารถของ ${ctx.avatar.card.name}` : trigger === 'battleStart' ? 'อีกฝ่ายเริ่ม Battle Phase' : trigger === 'lastWill' ? `คำสั่งเสีย ของ ${ctx.avatar.card.name}` : trigger === 'constructDestroy' ? `${ctx.construct.card.name} กำลังจะถูกทำลาย` : trigger === 'mill' ? `อีกฝ่าย ธรณีสูบ ${ctx.n} ใบ` : trigger;
     const pick = await state.ask(rp, { title: `ตอบโต้? (${what})`, options: opts, optional: true, react: true, focus: reactFocus(state, rp, trigger, ctx) });
     if (pick == null) return null;
     if (typeof pick === 'string' && pick.startsWith('hc:')) {
@@ -1117,6 +1122,8 @@
         const sf = FX(d.card.id); if (sf && sf.onSurviveAttack && !d.lostAbilities) await sf.onSurviveAttack(A, d.owner, d);
       }
       const dGone = dDies && !onField(state, d), aGone = aDies && !onField(state, a);
+      // who destroyed an Avatar in battle this turn (พระอินทร์ ผู้ช่วยเหลือ)
+      for (const [w, lGone] of [[a, dGone], [d, aGone]]) if (lGone && onField(state, w)) { const wp = state.players[w.owner]; if (!wp.winLog || wp.winLog.turn !== state.turn) wp.winLog = { turn: state.turn, list: [] }; wp.winLog.list.push({ card: w.card, sym: symbolOf(state, w) }); }
       if (dGone && onField(state, a) && afx && afx.onBattleWin && !a.lostAbilities) await afx.onBattleWin(A, p, a, { power, loserPower: dp, loser: d });
       if (dGone && onField(state, a)) for (const m of attachedTo(state, a)) { const f = FX(m.card.id); if (f && f.onEquippedBattleWin) await f.onEquippedBattleWin(A, m.owner, m, a, { power, loserPower: dp, loser: d }); }
       if (dGone && onField(state, a)) for (const src of pl.avatars.slice()) { const f = FX(src.card.id); if (src !== a && f && f.onAllyBattleWin && !src.lostAbilities) await f.onAllyBattleWin(A, p, src, a, d); }
@@ -1161,6 +1168,7 @@
       log(state, `LIFE ของ ${pl.name} ถูกหงายด้วยเอฟเฟกต์: "${next.card.name}" (ไม่ทำงาน)`);
     }
     if (k && pl.life.every(l => l.faceUp)) log(state, `⚠️ ${pl.name} เข้าสู่สถานะ "สาหัส" — โดนอีกครั้งเดียวแพ้`);
+    if (k) pl.fxFlipTurn = state.turn; // ตู้เก็บอาหารฉุกเฉิน M.R.E
     return k;
   }
 
@@ -1214,6 +1222,10 @@
     if (state.inBattle && state.players[owner].battleSafe === state.turn) { log(state, `${a.card.name} ไม่ถูกทำลายจากการต่อสู้ในเทิร์นนี้`); return; }
     if (state.inBattle && (a.battleSafeUntil || 0) >= state.turn) { log(state, `${a.card.name} ไม่ถูกทำลายจากการต่อสู้`); return; }
     if (a.noDestroyTurn === state.turn) { log(state, `${a.card.name} ไม่ถูกทำลายในเทิร์นนี้`); return; }
+    // CC03: "not destroyed by card abilities" (until end of turn, or always / only by the opponent's) and "not destroyed in battle by ..."
+    { const byBattle = why === 'แพ้การต่อสู้';
+      if (!byBattle && ((a.abilitySafeUntil || 0) >= state.turn || (fx && fx.abilityProof && !a.lostAbilities && fx.abilityProof(A, a, byP, owner)))) { log(state, `${a.card.name} ไม่ถูกทำลายด้วยความสามารถการ์ด`); return; }
+      if (byBattle && fx && fx.battleProof && !a.lostAbilities && fx.battleProof(A, a)) { log(state, `${a.card.name} ไม่ถูกทำลายจากการต่อสู้`); return; } }
     if (state.inBattle) for (const m of attachedTo(state, a)) {
       const f = FX(m.card.id);
       if (f && f.battleShield && !m.shieldUsed) { m.shieldUsed = true; log(state, `${a.card.name} ไม่ถูกทำลาย ("${m.card.name}")`); return; }
@@ -1254,6 +1266,7 @@
     a.destroyedBy = byP;
     { const opl = state.players[a.owner]; if (!opl.deaths || opl.deaths.turn !== state.turn) opl.deaths = { turn: state.turn, n: 0 }; opl.deaths.n++; }
     for (const src of state.players[a.owner].avatars.slice()) { const f = FX(src.card.id); if (f && f.onAllyDestroyedField && !src.lostAbilities) await f.onAllyDestroyedField(A, a.owner, src, a, byP); }
+    for (const src of state.players[opp(a.owner)].avatars.slice()) { const f = FX(src.card.id); if (f && f.onOppAvatarDestroyed && !src.lostAbilities) await f.onOppAvatarDestroyed(A, opp(a.owner), src, a); }
     if (a.exileOnDeath) { a.exileOnDeath = false; const hl = state.players[a.owner].hell; hl.splice(hl.indexOf(a), 1); state.players[a.owner].dark.push(a); log(state, `${a.card.name} ถูกเนรเทศ (คำสั่งเสีย)`); }
     // equipped avatars that move to another avatar (วูตาตู)
     for (const m of equips) {
@@ -1302,6 +1315,7 @@
   // may player p choose card x as the target of a card ability? (กวนอู, มะม่วงดราชิลด์, เณรคู)
   function canTarget(state, p, x) {
     const q = fieldOwner(state, x); if (q < 0 || q === p) return true;
+    if (state.srcMagic && (x.noOppMagicTargetUntil || 0) >= state.turn) return false; // บักเจด
     const A = api(state);
     if (state.players[q].avatars.some(src => { const f = FX(src.card.id); return f && f.shieldTarget && !src.lostAbilities && f.shieldTarget(A, src, x); })) return false;
     if (state.land && state.land.owner === q) { const lf = FX(state.land.card.id); if (lf && lf.shieldTarget && lf.shieldTarget(A, state.land, x)) return false; }
@@ -1384,13 +1398,16 @@
         pl.avatars.forEach(a => { const f = FX(a.card.id); if (f && f.millExtra && (!src || src.card.id !== a.card.id)) extra += f.millExtra; });
         n += extra;
         const milled = [];
-        for (let i = 0; i < n && pl.deck.length; i++) { const c = pl.deck.shift(); pl.hell.push(c); milled.push(c); }
+        const toDark = pl.millExileTurn === state.turn; // การ์ดร่วงก็เอาไปทิ้งงงง!!!!
+        for (let i = 0; i < n && pl.deck.length; i++) { const c = pl.deck.shift(); (toDark ? pl.dark : pl.hell).push(c); milled.push(c); }
+        if (toDark && milled.length) log(state, `การ์ดที่ ธรณีสูบ ถูกเนรเทศแทนการลงนรก`);
         if (milled.length) pl.milledTurn = state.turn;
         log(state, `${pl.name} ธรณีสูบ ${milled.length} ใบ: ${milled.map(c => c.card.name).join(', ')}`);
         if (!pl.deck.length) { lose(state, p, 'การ์ดใน Deck หมด'); return milled; }
         for (const c of milled) { const f = FX(c.card.id); if (f && f.onMilled && pl.hell.includes(c)) await f.onMilled(A, p, c, src); }
         if (milled.length && state.land) { const lf = FX(state.land.card.id); if (lf && lf.onAnyMill) await lf.onAnyMill(A, state.land.owner, p); }
         if (milled.length) for (const src of state.players.flatMap(x => x.avatars.slice())) { const f = FX(src.card.id); if (f && f.onAnyMill && !src.lostAbilities && onField(state, src)) await f.onAnyMill(A, src.owner, src, p); }
+        if (milled.length && state.winner == null) await reactWindow(state, opp(p), 'mill', { p, n: milled.length });
         return milled;
       },
       // สอดแนม: look at top N, pick up to `max` matching cards to hand, rest to bottom
@@ -1460,7 +1477,7 @@
         if (a.linked) { log(state, `${a.card.name} อยู่ในสถานะคู่หู — ยึดการควบคุมไม่ได้`); return false; }
         if (from.constructs.some(c => { const g = (FX(c.card.id) || {}).controlGuard; return typeof g === 'function' ? g(A, c, from) : !!g; })) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม (รูปประจำบ้าน)`); return false; }
         const imm = FX(a.card.id);
-        if (((imm && imm.controlImmune && !a.lostAbilities) || attachedTo(state, a).some(m => (FX(m.card.id) || {}).controlImmuneHost)) && !force) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม`); return false; }
+        if (((imm && imm.controlImmune && !a.lostAbilities && (typeof imm.controlImmune !== 'function' || imm.controlImmune(A, a))) || attachedTo(state, a).some(m => (FX(m.card.id) || {}).controlImmuneHost)) && !force) { log(state, `${a.card.name} ไม่ถูกเปลี่ยนการควบคุม`); return false; }
         from.avatars.splice(from.avatars.indexOf(a), 1);
         const home = a.trueOwner != null ? a.trueOwner : a.owner;
         if (home === p) delete a.trueOwner; else a.trueOwner = home;
@@ -1517,7 +1534,7 @@
       restrictSummon: (p, symbol) => { state.players[p].summonOnly = { turn: state.turn, symbol }; },
       lockNames: (p, names) => { const pl = state.players[p]; if (!pl.locked || pl.locked.turn !== state.turn) pl.locked = { turn: state.turn, names: [] }; pl.locked.names.push(...names); },
       rest: a => { a.rested = true; },
-      wake: a => { a.rested = false; },
+      wake: a => { if (a.rested && state.players[a.owner]) state.players[a.owner].wokeTurn = state.turn; a.rested = false; },
       dice: () => 1 + Math.floor(rng(state) * 6),
       battleBuff: p => { state.players[p].battleBuff = true; },
       equipTargets: (p, card) => equipTargets(state, p, card),

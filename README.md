@@ -53,7 +53,7 @@ From bot-vs-bot games (192 games per pairing): Normal beats Easy 55% of the time
 
 ## Deck building
 
-- **+ New Deck**: choose from all 1,623 cards in every set (ลำเอียง cards are left out). Filter by set, type, color or search. **Auto-fill** completes the Deck to 50 + 5 LIFE.
+- **+ New Deck**: choose from all 1,683 cards in every set (ลำเอียง cards are left out). Filter by set, type, color or search. **Auto-fill** completes the Deck to 50 + 5 LIFE.
 - **Edit Deck**: editing a Starter Deck saves it as a new Deck; a saved Deck is updated in place.
 - **Import / Export**: copy a Deck as text to keep it or send it to a friend, then paste it back to import.
 - Saved Decks live in that browser only. Clearing browser data deletes them, so export the ones you want to keep.
@@ -61,7 +61,7 @@ From bot-vs-bot games (192 games per pairing): Normal beats Easy 55% of the time
 
 ## Supported cards
 
-- Card effects are implemented for most of KD01–KD04, BT01–BT11, CC01–CC02, SD01–SD09 and the promo cards (PRMO, ODY1, PRE0, SL). Reprints with the same text use the original card's ability.
+- Card effects are implemented for most of KD01–KD04, BT01–BT12, CC01–CC03, SD01–SD09 and the promo cards (PRMO, ODY1, PRE0, SL). Reprints with the same text use the original card's ability.
 - Cards from other sets play by the core rules (POWER, Cost, GEM, keywords), but their other ability text doesn't work yet.
 - Cards with an SCR (Secret Rare) version show the SCR art.
 - The English effect text is a translation for reading only; the game plays by the Thai card text.
@@ -81,7 +81,7 @@ Some cards still don't work correctly or don't work yet. If you find one, please
 | `index.html`, `style.css`, `ui.js` | Game screen, board and player prompts |
 | `engine.js` | Game rules (Rule Book ver. 3.2) |
 | `effects.js` | Each card's effect |
-| `cards.js` | Data for 1,623 cards (from bottcg.com) |
+| `cards.js` | Data for 1,683 cards (from bottcg.com) |
 | `cards_en.js`, `i18n.js` | English card effect text and the Thai / English switch |
 | `bot.js` | Starter Decks and the four bot levels |
 | `net.js` | Online play with room codes (PeerJS) |
